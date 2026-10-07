@@ -1,0 +1,16 @@
+SRCNN_RUN_V1
+dtype float32
+input_layout CHW
+weight_layout OIHW
+operation cross_correlation
+conv1 1 64 9 9 1 1 4 4 relu
+conv2 64 32 1 1 1 1 0 0 relu
+conv3 32 1 5 5 1 1 2 2 none
+input_checksum 20cfaf0e0e822854
+conv1_checksum 6807b738e4c115fe
+conv2_checksum 413ce02698d01ce4
+conv3_checksum 394f13880e5e1b3a
+compiler AppleClang 17.0.0.17000013
+arch arm64
+opt O3
+fp_contract off

@@ -1,0 +1,10 @@
+SRCNN_TENSOR_V1
+name output
+dtype float32
+layout CHW
+ndim 3
+shape 1 1 5
+count 5
+checksum_fnv1a64 fa0c68d6f00d2f52
+data
+23.2233028 120.900024 110.013908 274.286957 178.40155 

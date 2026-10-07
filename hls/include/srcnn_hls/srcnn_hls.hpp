@@ -1,0 +1,79 @@
+#pragma once
+
+#include "srcnn_hls/numeric_config.hpp"
+
+namespace srcnn_hls {
+
+struct LayerShape {
+    int channels;
+    int height;
+    int width;
+};
+
+struct NetworkShape {
+    LayerShape input;
+    LayerShape conv1;
+    LayerShape conv2;
+    LayerShape conv3;
+};
+
+struct AccumulatorObservations {
+    double preactivation_abs_max[3];
+    unsigned long long narrowing_saturation_count[3];
+};
+
+enum class PaddingMode {
+    kValid = 0,
+    kZeroSame = 1,
+    kReplicateSame = 2,
+};
+
+bool make_network_shape(int input_height, int input_width, PaddingMode padding_mode,
+                        NetworkShape* shape);
+
+// Compatibility overload for the frozen P1 vectors: true means zero-same and
+// false means valid. Official course execution must use kReplicateSame.
+bool make_network_shape(int input_height, int input_width, bool same_padding,
+                        NetworkShape* shape);
+
+#ifndef __SYNTHESIS__
+// Host-only P2.1 entry point. It exposes pre-activation maxima for the requested
+// worst-case/observed gap report; the synthesizable top below contains no such
+// diagnostic output.
+bool run_srcnn_natural(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width, PaddingMode padding_mode,
+    AccumulatorObservations* observations);
+
+bool run_srcnn_natural(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width, bool same_padding,
+    AccumulatorObservations* observations);
+#endif
+
+// P2.1 synthesizable skeleton. There are deliberately no HLS optimization or
+// interface pragmas in this phase; P0/P2.3 will establish the concrete AXI
+// contract on the x86 tool machine.
+extern "C" int srcnn_hls_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width, int padding_mode);
+
+}  // namespace srcnn_hls

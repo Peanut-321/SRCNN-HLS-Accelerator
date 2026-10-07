@@ -1,0 +1,10 @@
+SRCNN_TENSOR_V1
+name conv3_bias
+dtype float32
+layout O
+ndim 1
+shape 1
+count 1
+checksum_fnv1a64 863d6adce3b1a68a
+data
+0.200000003 

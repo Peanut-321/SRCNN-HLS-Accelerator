@@ -1,0 +1,13 @@
+/build/
+/build-p2-float/
+/build-p2-fixed/
+/build-p2-asan/
+/build-vitis/
+/run_output/
+.DS_Store
+/.codex-build/
+/.codex-finalizer/
+/.chart-data-*/
+*.swp
+*.swo
+*~

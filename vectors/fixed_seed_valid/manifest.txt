@@ -1,0 +1,16 @@
+SRCNN_VECTOR_SET_V1
+seed 1592594996
+dtype float32
+input_layout CHW
+weight_layout OIHW
+operation cross_correlation
+stride 1 1
+padding valid
+input_shape 1 13 17
+compiler AppleClang 17.0.0.17000013
+arch arm64
+opt O3
+fp_contract off
+noise_floor_conv1 2.769813e-06
+noise_floor_conv2 6.335335e-06
+noise_floor_conv3 6.009574e-05
