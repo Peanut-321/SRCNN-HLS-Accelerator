@@ -2,6 +2,7 @@ PROJECT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 AP_TYPES_INCLUDE_DIR ?= $(PROJECT_DIR)/third_party/HLS_arbitrary_Precision_Types/include
 AP_TYPES_CMAKE_ARG := $(if $(strip $(AP_TYPES_INCLUDE_DIR)),-DSRCNN_AP_TYPES_INCLUDE_DIR=$(abspath $(AP_TYPES_INCLUDE_DIR)),)
 VITIS_HLS ?= vitis_hls
+SRCNN_HLS_TOP ?= srcnn_hls_top
 
 .PHONY: host-float host-fixed vitis-export
 
@@ -20,7 +21,9 @@ host-fixed:
 	ctest --test-dir $(PROJECT_DIR)/build-p2-fixed -L fixed --output-on-failure
 
 # Example:
+# Natural baseline:
 # make vitis-export SRCNN_HLS_PART=<exact-part-from-P0a> SRCNN_HLS_CLOCK_NS=5.0
+# Line-buffer checkpoint: add SRCNN_HLS_TOP=srcnn_hls_line_buffer_top
 vitis-export:
 	@test -n "$(SRCNN_HLS_PART)" || \
 		(echo "SRCNN_HLS_PART is required (use the exact P0a part)"; exit 2)
@@ -28,4 +31,5 @@ vitis-export:
 		(echo "SRCNN_HLS_CLOCK_NS is required (use the confirmed P0a target)"; exit 2)
 	SRCNN_HLS_PART="$(SRCNN_HLS_PART)" \
 	SRCNN_HLS_CLOCK_NS="$(SRCNN_HLS_CLOCK_NS)" \
+	SRCNN_HLS_TOP="$(SRCNN_HLS_TOP)" \
 		$(VITIS_HLS) -f $(PROJECT_DIR)/hls/scripts/run_hls.tcl

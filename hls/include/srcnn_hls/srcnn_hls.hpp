@@ -76,4 +76,18 @@ extern "C" int srcnn_hls_top(
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width, int padding_mode);
 
+// Experimental structural checkpoint. Conv1 and Conv3 use rolling row buffers
+// plus horizontally shifted windows; Conv2 remains a direct 1x1 reduction.
+// It deliberately has no PIPELINE/UNROLL/ARRAY_PARTITION pragmas yet: the first
+// Vitis schedule report must establish where those pragmas are justified.
+extern "C" int srcnn_hls_line_buffer_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width, int padding_mode);
+
 }  // namespace srcnn_hls

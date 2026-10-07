@@ -496,3 +496,4 @@ End-to-end 至少包含：
 |---|---|---|
 | 0.1 | 2026-09-10 | 建立草案，未知课程项目显式标为 TBD |
 | 1.0 | 2026-10-05 | 根据 Canvas Project Overview、Golden starter、官方参考数据和已提交 Golden，冻结 `255×255`、bicubic 输入、replicate-edge、float32、CHW/OIHW 与 bias-first 可执行契约；部署接口/阈值继续保持 TBD |
+| 1.1 | 2026-10-08 | 在独立 `optimize/line-buffer` 分支提前建立 Conv1/Conv3 rolling line-buffer + sliding-window host 原型，保留 natural top 作基线；不改变算术、布局或接口契约，不添加 pragma，也不宣称 II/资源/性能。正式 P2.3 关闭仍依赖 P2.2b 与 Vitis csynth 报告。 |

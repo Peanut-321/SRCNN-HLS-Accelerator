@@ -72,7 +72,9 @@ set_tests_properties(srcnn_tests PROPERTIES LABELS "unit")
 # P2.1 dual-target skeleton. The float target is always available and is kept
 # separate from srcnn_golden so the frozen P1 implementation remains untouched.
 function(add_srcnn_hls_library target_name fixed_point_mode)
-    add_library(${target_name} STATIC hls/src/srcnn_hls.cpp)
+    add_library(${target_name} STATIC
+                hls/src/srcnn_hls.cpp
+                hls/src/srcnn_hls_line_buffer.cpp)
     set_target_properties(${target_name} PROPERTIES
                           CXX_STANDARD 14
                           CXX_STANDARD_REQUIRED ON
@@ -100,6 +102,13 @@ target_link_libraries(srcnn_hls_padding_modes PRIVATE srcnn_hls_float)
 add_test(NAME srcnn_hls_padding_modes COMMAND srcnn_hls_padding_modes)
 set_tests_properties(srcnn_hls_padding_modes PROPERTIES
                      LABELS "p2_2a;padding"
+                     TIMEOUT 120)
+
+add_executable(srcnn_hls_line_buffer_float tests/test_hls_line_buffer.cpp)
+target_link_libraries(srcnn_hls_line_buffer_float PRIVATE srcnn_hls_float)
+add_test(NAME srcnn_hls_line_buffer_float COMMAND srcnn_hls_line_buffer_float)
+set_tests_properties(srcnn_hls_line_buffer_float PROPERTIES
+                     LABELS "p2_3;line_buffer;float_bitwise"
                      TIMEOUT 120)
 
 # Mac/Linux fixed-point simulation uses Xilinx's open-source simulation-only
@@ -155,6 +164,14 @@ if(SRCNN_BUILD_HLS_FIXED_SIM)
     set_tests_properties(srcnn_hls_fixed_vectors PROPERTIES
                          LABELS "p2_2a;fixed"
                          TIMEOUT 120)
+
+
+    add_executable(srcnn_hls_line_buffer_fixed tests/test_hls_line_buffer.cpp)
+    target_link_libraries(srcnn_hls_line_buffer_fixed PRIVATE srcnn_hls_fixed)
+    add_test(NAME srcnn_hls_line_buffer_fixed COMMAND srcnn_hls_line_buffer_fixed)
+    set_tests_properties(srcnn_hls_line_buffer_fixed PROPERTIES
+                         LABELS "p2_3;line_buffer;fixed"
+                         TIMEOUT 180)
 endif()
 
 # Independent cross-validation oracle (pure-Python, stdlib only).

@@ -1,7 +1,7 @@
 # ELEN90096 SRCNN Execution Plan v2.2（实际执行记录）
 
 基于 [`spec.md`](./spec.md) v1.0、Canvas Project Overview、Golden starter 与
-2026-10-05 已提交 Golden Reference。最后更新：**2026-10-06**。
+2026-10-05 已提交 Golden Reference。最后更新：**2026-10-08**。
 
 **文档状态：** 🟢 `[ACTIVE]`。P2.2a 已在 Mac 完成，P2.2b 等正式资产恢复；P0 仍是
 外部关键路径。
@@ -39,7 +39,8 @@
 - **P2.1 dual-target 骨架：**Mac host 范围内已完成、验证并封存。
 - **255×255 workload 分析：**精确 MAC、参数、特征图和理论流量已记录，可直接用于
   Status Update；不包含任何伪装成实测的 FPGA 数字。
-- **当前允许动作：**在 Mac 上继续 P2.2b；P2.1 配置已重基线到课程正式
+- **当前允许动作：**在 Mac 上继续 P2.2b；同时已在隔离分支建立 line-buffer host
+  原型，作为结构正确性实验，不替代 P0a/csynth gate。P2.1 配置已重基线到课程正式
   `255×255 + replicate-edge + bias-first` 契约。
 - **最大进度风险：**P0 工具链/板卡链路仍未贯通，尚无任何真实 HLS、Vivado
   或 KV260 数据。
@@ -386,7 +387,7 @@ P2.2b 恢复正式资产后才能冻结 deployment 位宽和 `TOL_IMPL_VS_GOLDEN
 
 ---
 
-### P2.3 — 目标 HLS 结构实现 ⏸️ [BLOCKED — P0a + P2.2]
+### P2.3 — 目标 HLS 结构实现 🟡 [PARTIAL — line-buffer host 原型通过，csynth 仍阻塞]
 
 按用户 2026-09-10 的明确决策，不以 naive → pipeline → unroll → line buffer 的
 顺序逐级开发，而是直接实现 MVP 目标结构，再逐项反向关闭 pragma/模块生成消融版本。
@@ -394,6 +395,22 @@ P2.2b 恢复正式资产后才能冻结 deployment 位宽和 `TOL_IMPL_VS_GOLDEN
 进入 P2.3 前必须按 `spec.md §12` 把这项偏离写入规格变更记录。P2.1 的自然循环、
 零 pragma 版本应先在 P0a 工具上独立 csynth 并冻结，形成真实 naive baseline，
 而不是从目标版反推一个伪 baseline。
+
+#### 2026-10-08 Mac 结构检查点
+
+在独立分支 `optimize/line-buffer` 中新增 `srcnn_hls_line_buffer_top`，同时完整保留
+`srcnn_hls_top` natural baseline。Conv1/Conv3 使用 circular row banks 与横向滑动
+window；Conv2 使用直接 1×1 channel reduction。算术 helper、`data_t/acc_t`、bias-first
+顺序和层间 narrowing 均未改变，且尚未添加 `PIPELINE/UNROLL/ARRAY_PARTITION`。
+
+新增 float/fixed 双模式等价测试，覆盖 replicate-edge、zero-same、valid、1×1 与
+33×29 非方形输入。首次测试发现 row-bank/channel 维度顺序错误并产生越界；修正为
+`[row-bank][channel][column]` 后 Release 全套 7/7、ASan/UBSan 4/4 通过。详细证据见
+`results/p2_3-line-buffer-host.md`。
+
+此检查点只证明结构语义与内存安全，不证明综合可行性或性能；P2.3 仍不能标为 DONE。
+下一步必须在 Vitis 中先保存 natural baseline，再综合 line-buffer top，读取 schedule、
+memory-port、latency、II 与资源报告后才决定 pragma 和 banking。
 
 #### 目标实现
 
@@ -628,7 +645,7 @@ P0c    ⏳ TODO    — 尚无 KV260 overlay/DMA dummy 板测
 P1     ✅ DONE    — 课程 Golden 已验证并提交；内部回归资产继续冻结
 P2.1   ✅ DONE    — dual-target host 骨架、bitwise gate、fixed smoke 完成
 P2.2   🟡 PARTIAL — P2.2a 五向量 harness/饱和统计完成；P2.2b 等正式资产恢复到本机
-P2.3   ⏸️ BLOCKED — 依赖 P0a 与 P2.2；csynth/schedule 是进入后的首轮 gate
+P2.3   🟡 PARTIAL — line-buffer host 等价/安全通过；csynth、pragma 与正式数值 gate 未完成
 P3     ⏳ TODO    — PYNQ/DMA/bitstream/板级正确性与计时未开始
 P4     🟡 PARTIAL — Status Update deck/PDF 已生成；baseline、消融、Final Report 未完成
 OPT    ⏭️ DEFERRED— MVP 前禁止启动
@@ -666,7 +683,8 @@ Golden 已提交，课程 core 契约与 bias 顺序已关闭。接下来按以�
 3. **Status Update：从 2026-10-06 起同步收集证据。**优先准备 workload 计算、架构图、
    Golden MSE、定点误差和首份 csynth；其中 255×255 workload 计算已完成于
    `results/workload-analysis-255x255.md`，未测指标必须标 `NOT MEASURED`。
-4. **P0a 与 P2.2 通过后进入 P2.3。**以 schedule、dependency 与 memory-port 报告驱动
-   `PIPELINE/UNROLL/ARRAY_PARTITION/line buffer`，不在 Mac 上凭直觉宣称 II 或资源结果。
+4. **P0a 与 P2.2 通过后继续 P2.3 综合优化。**Mac line-buffer 原型已通过等价门；后续
+   `PIPELINE/UNROLL/ARRAY_PARTITION` 必须由 schedule、dependency 与 memory-port 报告
+   驱动，不在 Mac 上凭直觉宣称 II 或资源结果。
 
 已提交 Golden 和冻结 oracle 不再修改；P2.2/P2.3 的新代码必须以它们为只读参考。

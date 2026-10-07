@@ -42,3 +42,16 @@ Create one branch or commit series for each checkpoint:
 At every checkpoint, keep the same input, weights, padding, clock target, and
 measurement boundary. A version that fails layer-wise comparison against the
 frozen Golden must not become the parent of the next optimization checkpoint.
+
+## Active checkpoint
+
+Branch `optimize/line-buffer` contains the host-verified structural prototype:
+
+- the original `srcnn_hls_top` remains the natural-loop baseline;
+- `srcnn_hls_line_buffer_top` uses circular row banks and shifted windows for
+  Conv1/Conv3, with a direct 1x1 Conv2 reduction;
+- float outputs are bitwise equal and fixed-point outputs are exactly equal to
+  the natural top on replicate-edge, zero-same, valid, 1x1, and non-square
+  cases;
+- no HLS pragma, interface change, or performance claim is part of this host
+  checkpoint. Vitis schedule/resource evidence is still required.
