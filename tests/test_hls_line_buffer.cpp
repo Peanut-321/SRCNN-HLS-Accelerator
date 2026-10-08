@@ -97,6 +97,9 @@ void run_case(const char* name, int height, int width,
     std::vector<data_t> buffered1(element_count(shape.conv1));
     std::vector<data_t> buffered2(element_count(shape.conv2));
     std::vector<data_t> buffered3(element_count(shape.conv3));
+    std::vector<data_t> replicate1(element_count(shape.conv1));
+    std::vector<data_t> replicate2(element_count(shape.conv2));
+    std::vector<data_t> replicate3(element_count(shape.conv3));
 
     const int mode = static_cast<int>(padding_mode);
     if (srcnn_hls::srcnn_hls_top(
@@ -118,6 +121,20 @@ void run_case(const char* name, int height, int width,
     require_equal(name, "conv1", natural1, buffered1);
     require_equal(name, "conv2", natural2, buffered2);
     require_equal(name, "conv3", natural3, buffered3);
+
+    if (padding_mode == srcnn_hls::PaddingMode::kReplicateSame) {
+        if (srcnn_hls::srcnn_hls_line_buffer_replicate_top(
+                input.data(), conv1_weights.data(), conv1_bias.data(),
+                conv2_weights.data(), conv2_bias.data(), conv3_weights.data(),
+                conv3_bias.data(), replicate1.data(), replicate2.data(),
+                replicate3.data(), height, width) != 0) {
+            throw std::runtime_error(std::string(name) +
+                                     ": replicate-only top failed");
+        }
+        require_equal(name, "replicate-only conv1", buffered1, replicate1);
+        require_equal(name, "replicate-only conv2", buffered2, replicate2);
+        require_equal(name, "replicate-only conv3", buffered3, replicate3);
+    }
     std::cout << "PASS: " << name << '\n';
 }
 

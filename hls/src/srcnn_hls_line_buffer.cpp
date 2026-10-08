@@ -33,6 +33,7 @@ static_assert(config::kConv1KernelHeight == config::kConv1KernelWidth,
 static_assert(config::kConv1SamePadHeight == config::kConv1SamePadWidth,
               "specialized Conv1 path requires symmetric padding");
 
+template <bool ReplicateOnly>
 numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
                                          int input_height, int input_width,
                                          int stream_row, int stream_column,
@@ -44,7 +45,11 @@ numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
                            source_column >= 0 && source_column < input_width;
 
     if (!in_bounds) {
-        if (padding_mode != PaddingMode::kReplicateSame) {
+        // ReplicateOnly is a compile-time deployment choice. The specialized
+        // top therefore contains no runtime padding-mode selection here, while
+        // the existing generic top retains its original behaviour.
+        if (!ReplicateOnly &&
+            padding_mode != PaddingMode::kReplicateSame) {
             return static_cast<numeric::data_t>(0);
         }
         source_row = clamp_index(source_row, input_height);
@@ -55,6 +60,7 @@ numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
                             input_width)];
 }
 
+template <bool ReplicateOnly>
 void conv1_static_line_buffer(const numeric::data_t* input,
                               const numeric::data_t* weights,
                               const numeric::data_t* bias,
@@ -94,9 +100,10 @@ void conv1_static_line_buffer(const numeric::data_t* input,
     for (int stream_row = 0; stream_row < stream_height; ++stream_row) {
         for (int stream_column = 0; stream_column < stream_width;
              ++stream_column) {
-            const numeric::data_t sample = read_conv1_stream_sample(
-                input, input_height, input_width, stream_row, stream_column,
-                padding, padding_mode);
+            const numeric::data_t sample =
+                read_conv1_stream_sample<ReplicateOnly>(
+                    input, input_height, input_width, stream_row,
+                    stream_column, padding, padding_mode);
 
             // Read all old values before updating any bank. These explicit
             // fixed-bank accesses prevent synthesis from rebuilding the old
@@ -168,7 +175,8 @@ void conv1_static_line_buffer(const numeric::data_t* input,
                         // The frozen natural implementation skips out-of-frame
                         // zero-padding terms instead of multiplying by zero.
                         // Preserve that detail for bitwise float equivalence.
-                        if (padding_mode == PaddingMode::kZeroSame) {
+                        if (!ReplicateOnly &&
+                            padding_mode == PaddingMode::kZeroSame) {
                             const int source_row =
                                 output_row + kernel_row - padding;
                             const int source_column =
@@ -404,6 +412,7 @@ void conv2d_pointwise(const numeric::data_t* input,
     }
 }
 
+template <bool ReplicateOnly>
 bool run_line_buffer_impl(
     const numeric::data_t* input, const numeric::data_t* conv1_weights,
     const numeric::data_t* conv1_bias,
@@ -413,6 +422,11 @@ bool run_line_buffer_impl(
     const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width, PaddingMode padding_mode) {
+    if (ReplicateOnly &&
+        padding_mode != PaddingMode::kReplicateSame) {
+        return false;
+    }
+
     NetworkShape shape;
     if (!make_network_shape(input_height, input_width, padding_mode, &shape)) {
         return false;
@@ -430,7 +444,7 @@ bool run_line_buffer_impl(
     const int conv3_padding =
         same_padding ? config::kConv3SamePadHeight : 0;
 
-    conv1_static_line_buffer(
+    conv1_static_line_buffer<ReplicateOnly>(
         input, conv1_weights, conv1_bias, conv1_output, shape.input.height,
         shape.input.width, shape.conv1.height, shape.conv1.width,
         conv1_padding, padding_mode);
@@ -462,11 +476,29 @@ extern "C" int srcnn_hls_line_buffer_top(
         padding_mode > static_cast<int>(PaddingMode::kReplicateSame)) {
         return -1;
     }
-    return run_line_buffer_impl(
+    return run_line_buffer_impl<false>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,
                static_cast<PaddingMode>(padding_mode))
+               ? 0
+               : -1;
+}
+
+extern "C" int srcnn_hls_line_buffer_replicate_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width) {
+    return run_line_buffer_impl<true>(
+               input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
+               conv3_weights, conv3_bias, conv1_output, conv2_output,
+               conv3_output, input_height, input_width,
+               PaddingMode::kReplicateSame)
                ? 0
                : -1;
 }

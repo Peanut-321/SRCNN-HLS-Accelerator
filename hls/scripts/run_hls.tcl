@@ -13,8 +13,9 @@ if {![info exists ::env(SRCNN_HLS_TOP)] || $::env(SRCNN_HLS_TOP) eq ""} {
     set selected_top $::env(SRCNN_HLS_TOP)
 }
 if {$selected_top ne "srcnn_hls_top" &&
-    $selected_top ne "srcnn_hls_line_buffer_top"} {
-    error "SRCNN_HLS_TOP must be srcnn_hls_top or srcnn_hls_line_buffer_top"
+    $selected_top ne "srcnn_hls_line_buffer_top" &&
+    $selected_top ne "srcnn_hls_line_buffer_replicate_top"} {
+    error "SRCNN_HLS_TOP must be srcnn_hls_top, srcnn_hls_line_buffer_top, or srcnn_hls_line_buffer_replicate_top"
 }
 
 set script_dir [file dirname [file normalize [info script]]]
@@ -27,7 +28,8 @@ set compile_flags "-std=c++14 -I$include_dir -DSRCNN_HLS_FIXED_POINT=1"
 open_project -reset [file join $project_dir build-vitis $selected_top]
 set_top $selected_top
 add_files -cflags $compile_flags $natural_source
-if {$selected_top eq "srcnn_hls_line_buffer_top"} {
+if {$selected_top eq "srcnn_hls_line_buffer_top" ||
+    $selected_top eq "srcnn_hls_line_buffer_replicate_top"} {
     add_files -cflags $compile_flags $line_buffer_source
 }
 open_solution -reset solution1

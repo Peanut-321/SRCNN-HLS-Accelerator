@@ -90,4 +90,19 @@ extern "C" int srcnn_hls_line_buffer_top(
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width, int padding_mode);
 
+// MAC-A deployment specialization. It shares the same line-buffer and
+// arithmetic implementation but fixes the network to replicate-edge padding at
+// compile time. Dynamic height/width remain temporarily exposed so the existing
+// 1x1, 13x17, and 33x29 host regressions can verify this specialization before
+// the final 255x255 deployment wrapper is frozen.
+extern "C" int srcnn_hls_line_buffer_replicate_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width);
+
 }  // namespace srcnn_hls
