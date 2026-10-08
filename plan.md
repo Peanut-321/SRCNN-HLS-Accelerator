@@ -488,6 +488,14 @@ OC4的Mac门禁已通过：Release float 4/4、host `ap_fixed` 7/7、ASan/UBSan 
 group trip 16、inner trip 81/II=1、四路乘法器、总latency、slack及资源。证据见
 `results/p2_4-conv1-oc4-host.md`。
 
+OC4的5 ns综合已通过并升级为当前HLS吞吐checkpoint。group/inner trip为 `16/81`，
+inner II=1，四个乘法器共用16 DSP；top latency从OC2的310,940,237降至
+206,910,029 cycles（-33.5%），Conv1从213,807,412降至109,777,204（-48.7%）。
+top/Conv1/MAC/output-loop slack分别为 `+0.05/+0.17/+0.17/+1.28 ns`。资源变化为
+BRAM `154→152`、DSP `17→25`、LUT `14868→15960`、FF `7786→8229`。
+因此停止Conv1 UNROLL探索，不创建OC8；下一阶段进入overlay/板级集成，并分别测量
+kernel-only与PYNQ+DMA end-to-end，而不能把当前HLS top latency称为板级端到端结果。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
