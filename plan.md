@@ -455,6 +455,20 @@ Conv1 两个输出通道并行：两个通道共享同一个 window sample，但
 和分 bank 权重，每个通道内部仍按原 81 项顺序累加。目标是把 Conv1 每像素约
 `64×81` 次迭代降到约 `(64/2)×81`，同时重新检查5 ns、II、DSP、BRAM和逐层数值。
 
+#### 2026-10-08 P2.4：Conv1 OC2 吞吐实验
+
+已从标签 `hls-mac-a-replicate-5ns` 建立分支 `optimize/conv1-oc2-throughput`，新增
+`srcnn_hls_line_buffer_replicate_oc2_top`。Conv1 权重按两条 output-channel lane 分
+bank，窗口样本广播给两条 lane，lane MAC 显式 UNROLL；每条 lane 使用独立 accumulator，
+单通道内部 81 项累加顺序不变。权重预载和输出写回不展开，避免把单端口外部指针访问
+误混入本轮 MAC 并行实验。Conv2、Conv3、dtype、padding 和接口契约均不变。
+
+Mac 门禁已通过：Release float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4；13×17、
+1×1、33×29 replicate 用例逐层与 MAC-A 精确一致。Windows 下一步只综合 OC2 top 的
+5 ns/6 ns 两个独立 component，检查 Conv1 分组 MAC 的 trip count 是否为 2592、II 是否
+仍为 1、top latency 是否显著低于 457,505,951 cycles，以及新增 DSP/BRAM 和5 ns slack。
+证据与综合门禁见 `results/p2_4-conv1-oc2-host.md`。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
