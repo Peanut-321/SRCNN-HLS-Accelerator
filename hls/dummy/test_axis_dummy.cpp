@@ -8,7 +8,7 @@
 
 namespace {
 
-using srcnn_hls::axis_dummy::axis_dummy_top;
+using ::axis_dummy_top;
 using srcnn_hls::axis_dummy::axis_stream_t;
 using srcnn_hls::axis_dummy::axis_word_t;
 

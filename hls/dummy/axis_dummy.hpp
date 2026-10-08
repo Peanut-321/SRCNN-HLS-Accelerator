@@ -50,8 +50,9 @@ using axis_stream_t = hls::stream<axis_word_t>;
 
 #endif
 
-extern "C" void axis_dummy_top(axis_stream_t& input, axis_stream_t& output,
-                                int length);
-
 }  // namespace axis_dummy
 }  // namespace srcnn_hls
+
+extern "C" void axis_dummy_top(srcnn_hls::axis_dummy::axis_stream_t& input,
+                               srcnn_hls::axis_dummy::axis_stream_t& output,
+                               int length);
