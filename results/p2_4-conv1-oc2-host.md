@@ -4,7 +4,7 @@ Date: 2026-10-08
 Branch: `optimize/conv1-oc2-throughput`  
 Parent tag: `hls-mac-a-replicate-5ns` (`1965c5c`)  
 Code commit: `d8c4849`  
-Status: Mac host correctness complete; Vitis 5 ns / 6 ns synthesis pending
+Status: frozen; Mac host correctness and Vitis 5 ns synthesis complete
 
 ## Controlled change
 
@@ -25,8 +25,7 @@ Only Conv1 output-channel parallelism changes:
   input size arguments, and external pointer interfaces are unchanged.
 
 The expected Conv1 inner iteration count per output pixel changes from
-`64 * 9 * 9 = 5184` to `(64 / 2) * 9 * 9 = 2592`. This is a hypothesis until
-the schedule report confirms the loop trip count and II.
+`64 * 9 * 9 = 5184` to `(64 / 2) * 9 * 9 = 2592`.
 
 ## Host correctness gate
 
@@ -40,44 +39,49 @@ For replicate padding, the OC2 top is compared layer-by-layer with the frozen
 MAC-A top on 13x17, 1x1, and 33x29 inputs. Float comparisons are bitwise and
 fixed-point comparisons are exact for Conv1, Conv2, and Conv3.
 
-## Required Vitis gate
+## Vitis 5 ns synthesis result
 
-Synthesize only the OC2 top under the same settings as MAC-A:
+The OC2 top was synthesized under the same settings as MAC-A:
 
 ```text
 Top: srcnn_hls_line_buffer_replicate_oc2_top
 Part: xck26-sfvc784-2LV-c
-Clock points: 5 ns and 6 ns
+Clock: 5 ns
 CFLAGS: -std=c++14 -DSRCNN_HLS_FIXED_POINT=1
 ```
 
-Suggested Windows commands from a Vitis HLS shell:
+| Metric | MAC-A | OC2 | Change |
+|---|---:|---:|---:|
+| Top latency | 457,505,951 | 310,940,237 | -32.0% |
+| Top interval | 457,505,952 | 310,940,238 | -32.0% |
+| Conv1 latency | 360,373,126 | 213,807,412 | -40.7% |
+| Top slack | +0.05 ns | +0.02 ns | -0.03 ns |
+| BRAM | 136 | 154 | +18 |
+| DSP | 13 | 17 | +4 |
+| FF | 7,661 | 7,786 | +125 |
+| LUT | 13,982 | 14,868 | +886 |
+
+The schedule represents the effective 2592 Conv1 iterations as 32 output
+channel groups times an inner 81-position kernel loop. The inner loop has II=1
+and latency 84 cycles, and its two unrolled MAC lanes use eight DSPs. This is
+the intended `32 * 81 = 2592` schedule even though no single flattened report
+row has trip count 2592.
+
+The 18 added BRAMs are fully explained by two 8-BRAM weight banks and two
+1-BRAM bias banks. The former are required for two simultaneous weight reads;
+the latter are low-utilization candidates for a separate future experiment.
+
+The MAC loop retains +0.23 ns slack. The new minimum +0.02 ns slack is in the
+two-element Conv1 output loop, which performs activation/narrowing, CHW address
+generation, and output writeback. OC2 therefore passes 5 ns, but this output
+loop must be isolated before attempting OC4.
+
+Raw-report fingerprint:
 
 ```text
-git fetch origin
-git switch optimize/conv1-oc2-throughput
-git pull --ff-only
-make vitis-export SRCNN_HLS_PART=xck26-sfvc784-2LV-c SRCNN_HLS_CLOCK_NS=5 SRCNN_HLS_TOP=srcnn_hls_line_buffer_replicate_oc2_top
+csynth (4).rpt  bfd749fbbd502b78bcee98a674aaf2e29d577fb4c84a7ae0f1147325bf496f94
 ```
 
-Use a distinct 6 ns component/workspace rather than overwriting the 5 ns
-report. Record:
-
-- top and per-layer latency/interval;
-- Conv1 grouped-MAC trip count, latency, and achieved II;
-- top/Conv1/Conv2/Conv3 slack;
-- BRAM, DSP, LUT, FF, and the inferred storage for `weights_by_lane`;
-- any scheduling warning about memory ports or loop-carried dependencies.
-
-## Decision gate
-
-Accept OC2 as the new throughput checkpoint only if:
-
-1. the grouped Conv1 MAC loop has trip count 2592 and II=1;
-2. top latency falls materially relative to MAC-A's 457,505,951 cycles;
-3. 5 ns timing still closes, or the exact new failing path is understood;
-4. resource use remains below the overlay's kernel budget;
-5. no arithmetic or interface contract changes were used to obtain the gain.
-
-If II rises above 1, inspect the schedule/dependency and memory-port reports
-before changing code. Do not add a second optimization in the same experiment.
+OC2 is accepted as the new HLS throughput checkpoint, subject to the still-open
+P0 overlay-specific kernel budget. Its child experiment may change only Conv1
+writeback address generation; OC4 must not be mixed into that experiment.

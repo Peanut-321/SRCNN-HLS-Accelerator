@@ -469,6 +469,13 @@ Mac 门禁已通过：Release float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4�
 仍为 1、top latency 是否显著低于 457,505,951 cycles，以及新增 DSP/BRAM 和5 ns slack。
 证据与综合门禁见 `results/p2_4-conv1-oc2-host.md`。
 
+5 ns 综合已通过：内层 `81` 次 kernel 循环 II=1，两条 UNROLL lane 等效为
+`32×81=2592` 次调度迭代；top latency 降至 310,940,237 cycles（-32.0%），Conv1
+降至 213,807,412 cycles（-40.7%）。代价为 DSP `13→17`、BRAM `136→154`、
+LUT `13982→14868`、FF `7661→7786`。top slack 为 `+0.02 ns`，当前最紧路径从
+MAC 转移到 Conv1 两元素输出循环；OC2 封存后，下一独立实验只重构 CHW 写回地址生成，
+不同时加入 OC4。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
