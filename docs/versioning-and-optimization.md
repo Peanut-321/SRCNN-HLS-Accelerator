@@ -55,3 +55,10 @@ Branch `optimize/line-buffer` contains the host-verified structural prototype:
   cases;
 - no HLS pragma, interface change, or performance claim is part of this host
   checkpoint. Vitis schedule/resource evidence is still required.
+
+Its first Vitis 2026.1 synthesis failed timing at both 5 ns (-0.61 ns) and 6 ns
+(-0.27 ns), with the hierarchy report locating the active bottleneck in Conv1.
+Branch `optimize/conv1-static-line-buffer` therefore replaces only Conv1's
+runtime circular-bank selection with eight fixed row delays and a 9x9 shift
+window. Commit `936ecd6` passes float, host `ap_fixed`, and sanitizer gates; it
+still requires a controlled 6 ns re-synthesis before any performance claim.

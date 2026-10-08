@@ -387,7 +387,7 @@ P2.2b 恢复正式资产后才能冻结 deployment 位宽和 `TOL_IMPL_VS_GOLDEN
 
 ---
 
-### P2.3 — 目标 HLS 结构实现 🟡 [PARTIAL — line-buffer host 原型通过，csynth 仍阻塞]
+### P2.3 — 目标 HLS 结构实现 🟡 [PARTIAL — 原 circular 版时序失败，Conv1 固定延迟版已通过 host gate]
 
 按用户 2026-09-10 的明确决策，不以 naive → pipeline → unroll → line buffer 的
 顺序逐级开发，而是直接实现 MVP 目标结构，再逐项反向关闭 pragma/模块生成消融版本。
@@ -411,6 +411,25 @@ window；Conv2 使用直接 1×1 channel reduction。算术 helper、`data_t/acc
 此检查点只证明结构语义与内存安全，不证明综合可行性或性能；P2.3 仍不能标为 DONE。
 下一步必须在 Vitis 中先保存 natural baseline，再综合 line-buffer top，读取 schedule、
 memory-port、latency、II 与资源报告后才决定 pragma 和 banking。
+
+#### 2026-10-08 Windows csynth 与 Conv1 结构重构
+
+同一器件、CFLAGS、无手写 pragma 条件下，Vitis 2026.1 自动启用了
+`syn.compile.pipeline_loops=64`。natural 在 5 ns/6 ns 分别为 `+0.02/+0.07 ns`，
+原 circular line-buffer 分别为 `-0.61/-0.27 ns`，两次均未收敛；6 ns 资源为
+138 BRAM、16,671 LUT、6,837 FF。层级报告把瓶颈定位到 Conv1，Conv3 在 6 ns
+已有 `+0.08 ns` slack。因此停止创建 7 ns component，也不把超大 top interval
+解释为 II=1 或吞吐提升。
+
+已从原 checkpoint 建立 `optimize/conv1-static-line-buffer`：Conv1 改为 8 个固定
+行延迟 bank + 9×9 横向 shift window，移除运行时 circular `head/bank` 选择；Conv2、
+Conv3、natural baseline 和全部算术契约不变，未添加 pragma。Mac 回归结果为 float
+4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4，全层逐位/精确一致。证据见
+`results/p2_3-conv1-static-line-buffer-host.md`。
+
+下一门禁是在相同 part/CFLAGS 的 6 ns component 上重新综合该分支，对比 Conv1
+层级 slack、top slack、memory binding 和 BRAM/LUT/FF/DSP。若仍失败，先读新 schedule
+与 memory-port/dependency 报告，再决定下一项结构修改；仍不先加 pragma。
 
 #### 目标实现
 

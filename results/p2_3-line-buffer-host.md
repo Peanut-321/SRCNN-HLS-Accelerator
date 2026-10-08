@@ -2,7 +2,8 @@
 
 Date: 2026-10-08  
 Branch: `optimize/line-buffer`  
-Status: host correctness complete; Vitis synthesis not run
+Status: host correctness complete; original structure synthesized but failed
+timing at 5 ns and 6 ns
 
 ## Scope
 
@@ -46,15 +47,40 @@ slice: storage declared `[channel][row-bank][column]` was passed to a loader as
 if row-bank were the leading contiguous dimension. The declaration was changed
 to `[row-bank][channel][column]`; the sanitizer and numerical suites then passed.
 
+## Windows synthesis observation
+
+The original circular-bank checkpoint was synthesized in Vitis 2026.1 under
+the same part, CFLAGS, and no-user-pragma conditions as the natural baseline.
+Vitis automatically enabled `syn.compile.pipeline_loops=64`; these results are
+therefore automatic-pipelining exploration, not a hand-pipelined design.
+
+| Top | Constraint | Slack | BRAM | LUT | FF | Result |
+|---|---:|---:|---:|---:|---:|---|
+| natural | 5 ns | +0.02 ns | 0 | 6,929 | 2,179 | pass, marginal |
+| circular line buffer | 5 ns | -0.61 ns | 138 | 16,767 | 7,575 | fail |
+| natural | 6 ns | +0.07 ns | 0 | 6,922 | 2,390 | pass, marginal |
+| circular line buffer | 6 ns | -0.27 ns | 138 | 16,671 | 6,837 | fail |
+
+The hierarchy report identifies the Conv1 line-buffer submodule as the timing
+bottleneck; Conv3 has +0.08 ns slack at the 6 ns diagnostic point. The reported
+top interval of 440,873,343 cycles is not evidence of end-to-end II=1 or FPS.
+Raw report directories are not yet checked into this repository, so the table
+records the reviewed console/report values supplied during the Windows run.
+
+This result triggered the isolated Conv1 fixed-delay refactor on branch
+`optimize/conv1-static-line-buffer`; see
+`results/p2_3-conv1-static-line-buffer-host.md`.
+
 ## Evidence boundary
 
-This is not a performance result. The following remain `NOT MEASURED` until an
-x86 Vitis machine is available:
+This is not a demonstrated performance improvement. The following remain
+unresolved until the refactored branch is synthesized and the raw reports are
+preserved:
 
-- achieved/target II and latency;
+- meaningful per-loop II, latency, and throughput interpretation;
 - schedule/dependency and memory-port limitations;
-- DSP/LUT/FF/BRAM/URAM;
-- estimated and implemented clock;
+- refactored DSP/LUT/FF/BRAM/URAM and timing;
+- implemented clock after Vivado place-and-route;
 - board throughput or speedup.
 
 Before adding pragmas, synthesize both tops under the same part, clock, numeric
