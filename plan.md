@@ -144,7 +144,7 @@ x86_64 Linux/Windows 工具机，P0c 还需要 KV260。
 
 | 子阶段 | 目标 | 当前状态 | 已有产物 | 缺失证据 |
 |---|---|---|---|---|
-| P0a | dummy kernel csynth + export IP | ⏸️ BLOCKED | P2.1 Vitis Tcl/Make 入口已备，part/clock fail-closed | 工具版本、确切 part/clock、csynth/export 报告 |
+| P0a | dummy kernel csynth + export IP | 🟡 IN PROGRESS | `deploy/axis-dummy` 已实现32-bit AXIS dummy，Mac协议测试1/1通过 | Windows Vitis C-sim/csynth/export及报告 |
 | P0b | Vivado BD + bitstream | ⏳ TODO | 无 | BD、`.bit/.hwh`、implementation/timing report |
 | P0c | PYNQ overlay + AXI DMA dummy 收发 | ⏳ TODO | 无 | host 脚本、板上 log、重复加载与收发结果 |
 
@@ -723,7 +723,7 @@ Golden，应作为独立里程碑准备，不能等最终报告时顺便整理�
 
 ```text
 S0     🟡 PARTIAL  — spec v1.0 已冻结课程 core；DMA/clock/资源预算/颜色后处理仍待确认
-P0a    ⏸️ BLOCKED — 等待 x86 Vitis、part、clock；尚无 csynth/export
+P0a    🟡 ACTIVE  — AXIS dummy及Mac门禁完成；等待Windows Vitis C-sim/csynth/export
 P0b    ⏳ TODO    — 尚无 Vivado BD/bitstream
 P0c    ⏳ TODO    — 尚无 KV260 overlay/DMA dummy 板测
 P1     ✅ DONE    — 课程 Golden 已验证并提交；内部回归资产继续冻结

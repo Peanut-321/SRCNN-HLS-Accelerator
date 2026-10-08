@@ -104,6 +104,30 @@ set_tests_properties(srcnn_hls_padding_modes PROPERTIES
                      LABELS "p2_2a;padding"
                      TIMEOUT 120)
 
+# P0a can be functionally tested on macOS without the vendor hls::stream and
+# ap_axiu headers. Vitis C simulation omits this definition and uses the real
+# vendor types through the same public header.
+add_library(srcnn_axis_dummy_host STATIC hls/dummy/axis_dummy.cpp)
+set_target_properties(srcnn_axis_dummy_host PROPERTIES
+                      CXX_STANDARD 14
+                      CXX_STANDARD_REQUIRED ON
+                      CXX_EXTENSIONS OFF)
+target_include_directories(srcnn_axis_dummy_host PUBLIC hls/dummy)
+target_compile_definitions(srcnn_axis_dummy_host
+                           PUBLIC SRCNN_AXIS_DUMMY_HOST_SIM=1)
+target_compile_options(srcnn_axis_dummy_host PRIVATE
+                       -Wall -Wextra -Wpedantic -Wno-unknown-pragmas)
+add_executable(srcnn_axis_dummy_test hls/dummy/test_axis_dummy.cpp)
+target_link_libraries(srcnn_axis_dummy_test PRIVATE srcnn_axis_dummy_host)
+set_target_properties(srcnn_axis_dummy_test PROPERTIES
+                      CXX_STANDARD 14
+                      CXX_STANDARD_REQUIRED ON
+                      CXX_EXTENSIONS OFF)
+add_test(NAME srcnn_axis_dummy_test COMMAND srcnn_axis_dummy_test)
+set_tests_properties(srcnn_axis_dummy_test PROPERTIES
+                     LABELS "p0;axis_dummy"
+                     TIMEOUT 30)
+
 add_executable(srcnn_hls_line_buffer_float tests/test_hls_line_buffer.cpp)
 target_link_libraries(srcnn_hls_line_buffer_float PRIVATE srcnn_hls_float)
 add_test(NAME srcnn_hls_line_buffer_float COMMAND srcnn_hls_line_buffer_float)
