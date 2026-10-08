@@ -476,6 +476,18 @@ LUT `13982→14868`、FF `7661→7786`。top slack 为 `+0.02 ns`，当前最紧
 MAC 转移到 Conv1 两元素输出循环；OC2 封存后，下一独立实验只重构 CHW 写回地址生成，
 不同时加入 OC4。
 
+写回地址实验在5 ns下与封存OC2逐项相同：slack、latency、interval、资源和MAC schedule
+均无变化，说明Vitis 2026.1已自动生成等价地址硬件。该负结果不升级基线。随后从
+`hls-conv1-oc2-5ns` 直接建立第二且最后一组UNROLL实验
+`optimize/conv1-oc4-throughput`，新增
+`srcnn_hls_line_buffer_replicate_oc4_top`。四条lane将64通道分成16组，预期等效MAC
+调度量为 `16×81=1296`；累加顺序及其余网络不变。
+
+OC4的Mac门禁已通过：Release float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4，
+三个replicate尺寸逐层与OC2精确一致。下一步只综合OC4 top的5 ns component，确认
+group trip 16、inner trip 81/II=1、四路乘法器、总latency、slack及资源。证据见
+`results/p2_4-conv1-oc4-host.md`。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
