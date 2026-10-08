@@ -5,11 +5,12 @@ Last updated: 2026-10-08
 ## Repository state
 
 - Repository: `https://github.com/Peanut-321/SRCNN-HLS-Accelerator`
-- Active branch: `optimize/conv1-static-line-buffer`
+- Active branch: `optimize/conv1-mac-a-replicate`
 - Frozen baseline tag: `hls-functional-baseline-p2.2a`
 - Baseline commit: `3f8d285` (`Save verified HLS functional baseline`)
 - Line-buffer implementation commit: `f0662e5`
 - Conv1 fixed-delay refactor commit: `936ecd6`
+- MAC-A replicate specialization commit: `e68e0fd`
 
 `main` remains the unoptimized functional baseline. Do not merge the active
 branch until Vitis synthesis evidence has been reviewed.
@@ -24,6 +25,8 @@ branch until Vitis synthesis evidence has been reviewed.
 - Conv1 now uses eight fixed row-delay banks and a 9x9 shifted window; Conv3
   retains the earlier circular-bank implementation and Conv2 remains a direct
   1x1 channel reduction.
+- `srcnn_hls_line_buffer_replicate_top` is the MAC-A synthesis target. It fixes
+  replicate padding at compile time but adds no product register or pragma.
 - Release + host `ap_fixed`: 7/7 CTest PASS.
 - ASan/UBSan float build: 4/4 CTest PASS.
 - Float natural-vs-line-buffer comparison is bitwise exact; fixed comparison
@@ -43,16 +46,16 @@ mkdir fpga
 cd fpga
 git clone --recurse-submodules https://github.com/Peanut-321/SRCNN-HLS-Accelerator.git
 cd SRCNN-HLS-Accelerator
-git switch optimize/conv1-static-line-buffer
+git switch optimize/conv1-mac-a-replicate
 git submodule update --init --recursive
 git log -2 --oneline
 ```
 
 ## Immediate objective
 
-Re-synthesize `srcnn_hls_line_buffer_top` at the already used 6 ns diagnostic
-constraint. The natural and original circular reports are the comparison
-baselines; do not create a 7 ns component and do not add pragmas yet.
+Synthesize `srcnn_hls_line_buffer_replicate_top` in distinct 5 ns and 6 ns
+components. Compare them with the saved static Conv1 reports; do not start the
+product-register experiment B yet.
 
 First record:
 
@@ -67,7 +70,7 @@ Then, after confirming the exact KV260/K26 part and target clock:
 ```powershell
 $env:SRCNN_HLS_PART = "<confirmed-exact-part>"
 $env:SRCNN_HLS_CLOCK_NS = "<confirmed-target-period-ns>"
-$env:SRCNN_HLS_TOP = "srcnn_hls_line_buffer_top"
+$env:SRCNN_HLS_TOP = "srcnn_hls_line_buffer_replicate_top"
 vitis_hls -f .\hls\scripts\run_hls.tcl
 ```
 

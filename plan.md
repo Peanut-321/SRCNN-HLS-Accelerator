@@ -431,6 +431,23 @@ Conv3、natural baseline 和全部算术契约不变，未添加 pragma。Mac �
 层级 slack、top slack、memory binding 和 BRAM/LUT/FF/DSP。若仍失败，先读新 schedule
 与 memory-port/dependency 报告，再决定下一项结构修改；仍不先加 pragma。
 
+#### 2026-10-08 MAC-A：replicate 部署专用化
+
+5 ns/6 ns static 报告把 5 ns 唯一负 slack 定位到 Conv1 的
+`64×9×9=5184` MAC flatten pipeline；初始化和 window shift 均有正余量。因此建立独立
+分支 `optimize/conv1-mac-a-replicate`，只执行实验 A：新增
+`srcnn_hls_line_buffer_replicate_top`，用编译期 `ReplicateOnly` 参数移除 Conv1 部署
+实例中的 runtime padding-mode 选择与 zero-padding skip。通用 top、valid/zero 模式、
+动态尺寸和原算术顺序继续保留；未添加乘法寄存器、pragma、UNROLL 或位宽修改。
+
+Mac 门禁为 float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4；replicate 专用 top 在
+13×17、1×1、33×29 上逐层对比通用 top，float 逐位相等、fixed 精确相等。证据见
+`results/p2_3-mac-a-replicate-host.md`。
+
+下一步只综合 A 的新 top，分别保存 5 ns 与 6 ns component。若 5 ns 已通过且 MAC
+II 仍为 1，则不为时序启动 B；若仍失败，再从 A 建立独立乘法流水实验，不能把 A/B
+合并后才测。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
