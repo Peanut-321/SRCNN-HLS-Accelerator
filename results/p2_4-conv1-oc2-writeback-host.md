@@ -4,7 +4,7 @@ Date: 2026-10-08
 Branch: `optimize/conv1-oc2-writeback-address`  
 Parent tag: `hls-conv1-oc2-5ns` (`201cceb`)  
 Code commit: `a7b41d3`  
-Status: Mac host correctness complete; Vitis 5 ns synthesis pending
+Status: closed with no measurable synthesis benefit; do not promote over OC2
 
 ## Controlled change
 
@@ -52,9 +52,9 @@ For replicate padding, the writeback top is compared layer-by-layer with the
 frozen OC2 top on 13x17, 1x1, and 33x29 inputs. Float comparisons are bitwise
 and fixed-point comparisons are exact for Conv1, Conv2, and Conv3.
 
-## Required Vitis gate
+## Vitis 5 ns synthesis result
 
-Synthesize only the new top under the frozen OC2 settings:
+The new top was synthesized under the frozen OC2 settings:
 
 ```text
 Top: srcnn_hls_line_buffer_replicate_oc2_writeback_top
@@ -63,26 +63,39 @@ Clock: 5 ns
 CFLAGS: -std=c++14 -DSRCNN_HLS_FIXED_POINT=1
 ```
 
-Use a distinct component, for example:
+Component:
 
 ```text
 srcnn_hls_conv1_oc2_writeback_5ns
 ```
 
-Compare against `hls-conv1-oc2-5ns`:
+| Metric | Frozen OC2 | Incremental writeback | Change |
+|---|---:|---:|---:|
+| Top slack | +0.02 ns | +0.02 ns | 0 |
+| Output-loop slack | +0.02 ns | +0.02 ns | 0 |
+| Top latency | 310,940,237 | 310,940,237 | 0 |
+| Top interval | 310,940,238 | 310,940,238 | 0 |
+| BRAM | 154 | 154 | 0 |
+| DSP | 17 | 17 | 0 |
+| FF | 7,786 | 7,786 | 0 |
+| LUT | 14,868 | 14,868 | 0 |
 
-- top and Conv1 slack;
-- the two-element output-loop slack, latency, and II;
-- grouped MAC trip counts, II, and latency;
-- top and Conv1 latency/interval;
-- BRAM, DSP, LUT, and FF;
-- Bind Op/address-generation operations in the output loop.
+The Conv1 MAC schedule is also unchanged: inner trip count 81, latency 84,
+iteration latency 5, and II=1, repeated by 32 output-channel groups.
 
-## Decision gate
+The most likely interpretation is that Vitis 2026.1 already canonicalized the
+original CHW address expression into the same recurrence during synthesis.
+Hand-writing the recurrence therefore produced an observationally identical
+implementation. This is a useful negative control, not a throughput result.
 
-Accept this experiment only if host equivalence remains true and synthesis
-shows a real writeback-path improvement without reducing MAC throughput or
-increasing material resources. The primary target is output-loop/top slack
-greater than the OC2 baseline's `+0.02 ns`; top latency must not regress
-materially from 310,940,237 cycles. If synthesis gives no improvement, keep
-the frozen OC2 tag and discard this branch rather than layering OC4 on it.
+The raw report remains on the Windows tool machine at:
+
+```text
+C:\fpga\vitis-workspace\srcnn_hls_conv1_oc2_writeback_5ns\srcnn_hls_conv1_oc2_writeback_5ns\hls\syn\report\csynth.rpt
+```
+
+## Decision
+
+Do not promote this branch over `hls-conv1-oc2-5ns`, and do not cite it as an
+optimization gain. Retain it as an ablation/negative-result record. The next
+throughput experiment must branch from the frozen OC2 tag, not from this code.

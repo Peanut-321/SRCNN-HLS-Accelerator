@@ -491,6 +491,12 @@ top slack是否高于 `+0.02 ns`，并确认MAC II、310,940,237-cycle top laten
 没有实质回退。证据与综合门禁见
 `results/p2_4-conv1-oc2-writeback-host.md`。
 
+5 ns结果中所有可观测指标与封存OC2完全相同：top/输出loop slack仍为 `+0.02 ns`，
+latency/interval仍为 `310,940,237/310,940,238`，BRAM/DSP/FF/LUT仍为
+`154/17/7786/14868`，MAC仍为 trip 81、latency 84、II=1。结论是Vitis已自动把
+原CHW表达式化为等价地址硬件；该分支作为负结果保留，不升级基线。第二且最后一组
+输出通道UNROLL实验应直接从 `hls-conv1-oc2-5ns` 建立OC4分支。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
