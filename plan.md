@@ -135,7 +135,7 @@ baseline、co-sim/power、benchmark 和 Canvas 提交要求，仍以 `spec.md §
 
 ---
 
-## P0 — 工具链贯通 ⏸️ [BLOCKED — 最高优先级]
+## P0 — 工具链贯通 🟡 [ACTIVE — 最高优先级]
 
 P0 是当前外部关键路径。主力 Mac 无法运行 Vivado/Vitis；需要实验室或队友的
 x86_64 Linux/Windows 工具机，P0c 还需要 KV260。
@@ -144,8 +144,8 @@ x86_64 Linux/Windows 工具机，P0c 还需要 KV260。
 
 | 子阶段 | 目标 | 当前状态 | 已有产物 | 缺失证据 |
 |---|---|---|---|---|
-| P0a | dummy kernel csynth + export IP | 🟡 IN PROGRESS | `deploy/axis-dummy` 已实现32-bit AXIS dummy，Mac协议测试1/1通过 | Windows Vitis C-sim/csynth/export及报告 |
-| P0b | Vivado BD + bitstream | ⏳ TODO | 无 | BD、`.bit/.hwh`、implementation/timing report |
+| P0a | dummy kernel csynth + export IP | ✅ DONE | Mac 1/1；Vitis 2026.1 C-sim/csynth/export通过；II=1，5 ns top slack +1.20 ns | 无；证据见 `results/p0a-axis-dummy-vitis.md` |
+| P0b | Vivado BD + bitstream | 🟡 NEXT | 已导出AXIS dummy IP | BD、`.bit/.hwh`、implementation/timing report |
 | P0c | PYNQ overlay + AXI DMA dummy 收发 | ⏳ TODO | 无 | host 脚本、板上 log、重复加载与收发结果 |
 
 ### 计划产出
@@ -723,13 +723,13 @@ Golden，应作为独立里程碑准备，不能等最终报告时顺便整理�
 
 ```text
 S0     🟡 PARTIAL  — spec v1.0 已冻结课程 core；DMA/clock/资源预算/颜色后处理仍待确认
-P0a    🟡 ACTIVE  — AXIS dummy及Mac门禁完成；等待Windows Vitis C-sim/csynth/export
-P0b    ⏳ TODO    — 尚无 Vivado BD/bitstream
+P0a    ✅ DONE    — AXIS dummy Mac/Vitis门禁、5 ns csynth和IP export完成
+P0b    🟡 NEXT    — 使用已导出dummy IP建立Vivado BD并生成timing-closed bit/hwh
 P0c    ⏳ TODO    — 尚无 KV260 overlay/DMA dummy 板测
 P1     ✅ DONE    — 课程 Golden 已验证并提交；内部回归资产继续冻结
 P2.1   ✅ DONE    — dual-target host 骨架、bitwise gate、fixed smoke 完成
 P2.2   🟡 PARTIAL — P2.2a 五向量 harness/饱和统计完成；P2.2b 等正式资产恢复到本机
-P2.3   🟡 PARTIAL — line-buffer host 等价/安全通过；csynth、pragma 与正式数值 gate 未完成
+P2.3   🟡 PARTIAL — OC4 host/csynth/5 ns通过并封存；正式数值资产与部署wrapper仍未完成
 P3     ⏳ TODO    — PYNQ/DMA/bitstream/板级正确性与计时未开始
 P4     🟡 PARTIAL — Status Update deck/PDF 已生成；baseline、消融、Final Report 未完成
 OPT    ⏭️ DEFERRED— MVP 前禁止启动

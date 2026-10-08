@@ -3,8 +3,8 @@
 Date: 2026-10-08  
 Branch: `deploy/axis-dummy`  
 Parent tag: `hls-conv1-oc4-5ns`  
-Status: Mac host gate passed; Vitis export, Vivado implementation, and board
-test pending
+Vitis compatibility commit: `f594722`
+Status: P0a complete; Vivado implementation and board test pending
 
 ## Purpose
 
@@ -62,7 +62,7 @@ Current result:
 1/1 CTest PASS
 ```
 
-## Windows Vitis gate
+## Windows Vitis result
 
 From a shell where Vitis HLS is available:
 
@@ -73,21 +73,41 @@ git pull --ff-only
 make vitis-axis-dummy-export SRCNN_HLS_PART=xck26-sfvc784-2LV-c SRCNN_HLS_CLOCK_NS=5
 ```
 
-The Tcl flow runs C simulation, C synthesis, and IP export. If GNU Make is not
-available, run the equivalent script directly after setting
-`SRCNN_HLS_PART=xck26-sfvc784-2LV-c` and `SRCNN_HLS_CLOCK_NS=5`:
+Vitis 2026.1 required the HLS top to be at global C-linkage scope and the
+interface pragmas to use explicit `mode=axis` / `mode=s_axilite` syntax. Commit
+`f594722` applies those compatibility changes while preserving the Mac types.
+
+Results:
 
 ```text
-hls/scripts/run_axis_dummy_hls.tcl
+C Simulation:        PASS
+C Synthesis at 5 ns: PASS
+Main-loop II:         1
+Top slack:            +1.20 ns
+Main-loop slack:      +3.65 ns
+Estimated Fmax:       408.36 MHz
+BRAM/DSP/FF/LUT:      0 / 0 / 112 / 325
+IP Catalog export:    PASS
 ```
 
-Save:
+Generated interfaces:
 
-- Vitis version and command log;
-- C-simulation result;
-- `csynth.rpt`, including loop II and 5 ns slack;
-- exported IP location and component metadata;
-- warnings about AXI sidebands or interface synthesis.
+```text
+input_r/output_r: 32-bit AXI4-Stream with TKEEP[3:0], TSTRB[3:0],
+                  TLAST, TVALID, and TREADY
+length:           AXI4-Lite register at offset 0x10
+block control:    ap_ctrl_hs
+```
+
+Windows artifacts:
+
+```text
+C:\fpga\vitis-workspace\axis_dummy_5ns\axis_dummy_5ns\hls\syn\report\csynth.rpt
+C:\fpga\vitis-workspace\axis_dummy_5ns\axis_dummy_5ns\hls\impl\export.zip
+```
+
+The 5 ns slack is the timing gate. Estimated Fmax is retained as a secondary
+diagnostic and must not replace post-implementation timing.
 
 ## Vivado P0b gate
 
