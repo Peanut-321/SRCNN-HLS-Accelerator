@@ -476,6 +476,21 @@ LUT `13982→14868`、FF `7661→7786`。top slack 为 `+0.02 ns`，当前最紧
 MAC 转移到 Conv1 两元素输出循环；OC2 封存后，下一独立实验只重构 CHW 写回地址生成，
 不同时加入 OC4。
 
+#### 2026-10-08 P2.4：OC2写回地址重构
+
+OC2已封存为标签 `hls-conv1-oc2-5ns`。子分支
+`optimize/conv1-oc2-writeback-address` 新增独立 top
+`srcnn_hls_line_buffer_replicate_oc2_writeback_top`：每个像素只计算一次
+`pixel_index=row×width+column` 和 `plane_size=height×width`，随后每写一个通道执行
+`next_output_index += plane_size`，替代两元素输出循环内重复的完整 CHW 地址表达式。
+MAC、两条 lane、activation/narrow、dtype、Conv2/Conv3 与接口均不变。
+
+Mac 门禁为 float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4；三个 replicate 尺寸
+逐层与封存OC2精确一致。下一门禁只综合新 top 的5 ns独立component，对比输出循环和
+top slack是否高于 `+0.02 ns`，并确认MAC II、310,940,237-cycle top latency及资源
+没有实质回退。证据与综合门禁见
+`results/p2_4-conv1-oc2-writeback-host.md`。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
