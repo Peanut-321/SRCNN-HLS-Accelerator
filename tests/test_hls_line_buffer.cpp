@@ -132,6 +132,8 @@ int main() {
         run_case("valid_13x17", 13, 17, srcnn_hls::PaddingMode::kValid);
         run_case("replicate_1x1", 1, 1,
                  srcnn_hls::PaddingMode::kReplicateSame);
+        run_case("zero_1x1", 1, 1,
+                 srcnn_hls::PaddingMode::kZeroSame);
         run_case("replicate_33x29", 33, 29,
                  srcnn_hls::PaddingMode::kReplicateSame);
         std::cout << "PASS: line-buffer top is exactly equal to natural top\n";

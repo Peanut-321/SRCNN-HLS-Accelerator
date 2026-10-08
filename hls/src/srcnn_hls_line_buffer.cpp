@@ -16,6 +16,188 @@ int clamp_index(int index, int extent) {
     return index;
 }
 
+// Conv1 is deliberately specialized instead of sharing the generic circular
+// row-bank implementation below. Its previous `head + kernel_row` bank lookup
+// put a runtime bank selector on every window refill. Here each of the eight
+// history banks has one fixed delay: bank 0 is one row old and bank 7 is eight
+// rows old. A padded raster stream feeds those delays and a 9x9 horizontal
+// shift window.
+constexpr int kConv1HistoryRows = config::kConv1KernelHeight - 1;
+constexpr int kConv1MaxStreamWidth =
+    config::kMaxInputWidth + 2 * config::kConv1SamePadWidth;
+
+static_assert(config::kConv1InChannels == 1,
+              "specialized Conv1 path requires one input channel");
+static_assert(config::kConv1KernelHeight == config::kConv1KernelWidth,
+              "specialized Conv1 path requires a square kernel");
+static_assert(config::kConv1SamePadHeight == config::kConv1SamePadWidth,
+              "specialized Conv1 path requires symmetric padding");
+
+numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
+                                         int input_height, int input_width,
+                                         int stream_row, int stream_column,
+                                         int padding,
+                                         PaddingMode padding_mode) {
+    int source_row = stream_row - padding;
+    int source_column = stream_column - padding;
+    const bool in_bounds = source_row >= 0 && source_row < input_height &&
+                           source_column >= 0 && source_column < input_width;
+
+    if (!in_bounds) {
+        if (padding_mode != PaddingMode::kReplicateSame) {
+            return static_cast<numeric::data_t>(0);
+        }
+        source_row = clamp_index(source_row, input_height);
+        source_column = clamp_index(source_column, input_width);
+    }
+
+    return input[chw_offset(0, source_row, source_column, input_height,
+                            input_width)];
+}
+
+void conv1_static_line_buffer(const numeric::data_t* input,
+                              const numeric::data_t* weights,
+                              const numeric::data_t* bias,
+                              numeric::data_t* output, int input_height,
+                              int input_width, int output_height,
+                              int output_width, int padding,
+                              PaddingMode padding_mode) {
+    static_assert(config::kStrideHeight == 1 && config::kStrideWidth == 1,
+                  "streaming Conv1 requires unit stride");
+
+    // Eight fixed row delays replace the old nine-bank circular buffer. The
+    // stream includes the same-padding halo, hence the small +8 width bound.
+    numeric::data_t line_buffer[kConv1HistoryRows][kConv1MaxStreamWidth];
+    numeric::data_t
+        window[config::kConv1KernelHeight][config::kConv1KernelWidth];
+
+    // The first eight raster rows read delay cells before every bank has
+    // received real stream data. Explicit initialization makes those warm-up
+    // reads defined in C simulation and synthesis.
+    for (int bank = 0; bank < kConv1HistoryRows; ++bank) {
+        for (int column = 0; column < kConv1MaxStreamWidth; ++column) {
+            line_buffer[bank][column] = static_cast<numeric::data_t>(0);
+        }
+    }
+    for (int kernel_row = 0; kernel_row < config::kConv1KernelHeight;
+         ++kernel_row) {
+        for (int kernel_column = 0;
+             kernel_column < config::kConv1KernelWidth; ++kernel_column) {
+            window[kernel_row][kernel_column] =
+                static_cast<numeric::data_t>(0);
+        }
+    }
+
+    const int stream_height = input_height + 2 * padding;
+    const int stream_width = input_width + 2 * padding;
+
+    for (int stream_row = 0; stream_row < stream_height; ++stream_row) {
+        for (int stream_column = 0; stream_column < stream_width;
+             ++stream_column) {
+            const numeric::data_t sample = read_conv1_stream_sample(
+                input, input_height, input_width, stream_row, stream_column,
+                padding, padding_mode);
+
+            // Read all old values before updating any bank. These explicit
+            // fixed-bank accesses prevent synthesis from rebuilding the old
+            // runtime circular-bank multiplexer.
+            const numeric::data_t delayed_1 =
+                line_buffer[0][stream_column];
+            const numeric::data_t delayed_2 =
+                line_buffer[1][stream_column];
+            const numeric::data_t delayed_3 =
+                line_buffer[2][stream_column];
+            const numeric::data_t delayed_4 =
+                line_buffer[3][stream_column];
+            const numeric::data_t delayed_5 =
+                line_buffer[4][stream_column];
+            const numeric::data_t delayed_6 =
+                line_buffer[5][stream_column];
+            const numeric::data_t delayed_7 =
+                line_buffer[6][stream_column];
+            const numeric::data_t delayed_8 =
+                line_buffer[7][stream_column];
+
+            line_buffer[0][stream_column] = sample;
+            line_buffer[1][stream_column] = delayed_1;
+            line_buffer[2][stream_column] = delayed_2;
+            line_buffer[3][stream_column] = delayed_3;
+            line_buffer[4][stream_column] = delayed_4;
+            line_buffer[5][stream_column] = delayed_5;
+            line_buffer[6][stream_column] = delayed_6;
+            line_buffer[7][stream_column] = delayed_7;
+
+            const numeric::data_t vertical_taps[config::kConv1KernelHeight] = {
+                delayed_8, delayed_7, delayed_6, delayed_5, delayed_4,
+                delayed_3, delayed_2, delayed_1, sample};
+
+            for (int kernel_row = 0;
+                 kernel_row < config::kConv1KernelHeight; ++kernel_row) {
+                for (int kernel_column = 0;
+                     kernel_column + 1 < config::kConv1KernelWidth;
+                     ++kernel_column) {
+                    window[kernel_row][kernel_column] =
+                        window[kernel_row][kernel_column + 1];
+                }
+                window[kernel_row][config::kConv1KernelWidth - 1] =
+                    vertical_taps[kernel_row];
+            }
+
+            // The first valid 9x9 window ends at raster coordinate (8, 8).
+            if (stream_row + 1 < config::kConv1KernelHeight ||
+                stream_column + 1 < config::kConv1KernelWidth) {
+                continue;
+            }
+
+            const int output_row =
+                stream_row - (config::kConv1KernelHeight - 1);
+            const int output_column =
+                stream_column - (config::kConv1KernelWidth - 1);
+
+            for (int output_channel = 0;
+                 output_channel < config::kConv1OutChannels;
+                 ++output_channel) {
+                numeric::conv1_acc_t sum =
+                    arithmetic::begin_with_frozen_bias_order<
+                        numeric::conv1_acc_t>(bias[output_channel]);
+                for (int kernel_row = 0;
+                     kernel_row < config::kConv1KernelHeight; ++kernel_row) {
+                    for (int kernel_column = 0;
+                         kernel_column < config::kConv1KernelWidth;
+                         ++kernel_column) {
+                        // The frozen natural implementation skips out-of-frame
+                        // zero-padding terms instead of multiplying by zero.
+                        // Preserve that detail for bitwise float equivalence.
+                        if (padding_mode == PaddingMode::kZeroSame) {
+                            const int source_row =
+                                output_row + kernel_row - padding;
+                            const int source_column =
+                                output_column + kernel_column - padding;
+                            if (source_row < 0 || source_row >= input_height ||
+                                source_column < 0 ||
+                                source_column >= input_width) {
+                                continue;
+                            }
+                        }
+                        const int weight_index =
+                            (output_channel * config::kConv1KernelHeight +
+                             kernel_row) *
+                                config::kConv1KernelWidth +
+                            kernel_column;
+                        arithmetic::accumulate_product(
+                            sum, weights[weight_index],
+                            window[kernel_row][kernel_column]);
+                    }
+                }
+                output[chw_offset(output_channel, output_row, output_column,
+                                  output_height, output_width)] =
+                    arithmetic::activate_and_narrow<numeric::data_t>(sum,
+                                                                      true);
+            }
+        }
+    }
+}
+
 template <int InputChannels, int KernelSize>
 void load_row(const numeric::data_t* input, int input_height, int input_width,
               int source_row, PaddingMode padding_mode,
@@ -248,12 +430,10 @@ bool run_line_buffer_impl(
     const int conv3_padding =
         same_padding ? config::kConv3SamePadHeight : 0;
 
-    conv2d_line_buffer<numeric::conv1_acc_t, config::kConv1InChannels,
-                       config::kConv1OutChannels,
-                       config::kConv1KernelHeight>(
+    conv1_static_line_buffer(
         input, conv1_weights, conv1_bias, conv1_output, shape.input.height,
         shape.input.width, shape.conv1.height, shape.conv1.width,
-        conv1_padding, padding_mode, true);
+        conv1_padding, padding_mode);
     conv2d_pointwise<numeric::conv2_acc_t, config::kConv2InChannels,
                      config::kConv2OutChannels>(
         conv1_output, conv2_weights, conv2_bias, conv2_output,
