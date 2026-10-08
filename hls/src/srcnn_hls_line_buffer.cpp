@@ -60,7 +60,7 @@ numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
                             input_width)];
 }
 
-template <bool ReplicateOnly>
+template <bool ReplicateOnly, int OutputLanes>
 void conv1_static_line_buffer(const numeric::data_t* input,
                               const numeric::data_t* weights,
                               const numeric::data_t* bias,
@@ -70,12 +70,52 @@ void conv1_static_line_buffer(const numeric::data_t* input,
                               PaddingMode padding_mode) {
     static_assert(config::kStrideHeight == 1 && config::kStrideWidth == 1,
                   "streaming Conv1 requires unit stride");
+    static_assert(OutputLanes > 0,
+                  "Conv1 output-channel lane count must be positive");
+    static_assert(config::kConv1OutChannels % OutputLanes == 0,
+                  "Conv1 output channels must divide evenly into lanes");
+
+    constexpr int kOutputChannelGroups =
+        config::kConv1OutChannels / OutputLanes;
 
     // Eight fixed row delays replace the old nine-bank circular buffer. The
     // stream includes the same-padding halo, hence the small +8 width bound.
     numeric::data_t line_buffer[kConv1HistoryRows][kConv1MaxStreamWidth];
     numeric::data_t
         window[config::kConv1KernelHeight][config::kConv1KernelWidth];
+
+    // Bank weights by output lane so every unrolled lane has an independent
+    // read port. Each lane still accumulates its own 81 products in the frozen
+    // kernel-row/kernel-column order; only different output channels execute
+    // in parallel.
+    numeric::data_t
+        weights_by_lane[OutputLanes][kOutputChannelGroups]
+                       [config::kConv1KernelHeight]
+                       [config::kConv1KernelWidth];
+    numeric::data_t bias_by_lane[OutputLanes][kOutputChannelGroups];
+#pragma HLS ARRAY_PARTITION variable=weights_by_lane complete dim=1
+#pragma HLS ARRAY_PARTITION variable=bias_by_lane complete dim=1
+
+    for (int group = 0; group < kOutputChannelGroups; ++group) {
+        for (int lane = 0; lane < OutputLanes; ++lane) {
+            const int output_channel = group * OutputLanes + lane;
+            bias_by_lane[lane][group] = bias[output_channel];
+            for (int kernel_row = 0;
+                 kernel_row < config::kConv1KernelHeight; ++kernel_row) {
+                for (int kernel_column = 0;
+                     kernel_column < config::kConv1KernelWidth;
+                     ++kernel_column) {
+                    const int weight_index =
+                        (output_channel * config::kConv1KernelHeight +
+                         kernel_row) *
+                            config::kConv1KernelWidth +
+                        kernel_column;
+                    weights_by_lane[lane][group][kernel_row][kernel_column] =
+                        weights[weight_index];
+                }
+            }
+        }
+    }
 
     // The first eight raster rows read delay cells before every bank has
     // received real stream data. Explicit initialization makes those warm-up
@@ -161,12 +201,14 @@ void conv1_static_line_buffer(const numeric::data_t* input,
             const int output_column =
                 stream_column - (config::kConv1KernelWidth - 1);
 
-            for (int output_channel = 0;
-                 output_channel < config::kConv1OutChannels;
-                 ++output_channel) {
-                numeric::conv1_acc_t sum =
-                    arithmetic::begin_with_frozen_bias_order<
-                        numeric::conv1_acc_t>(bias[output_channel]);
+            for (int group = 0; group < kOutputChannelGroups; ++group) {
+                numeric::conv1_acc_t sums[OutputLanes];
+#pragma HLS ARRAY_PARTITION variable=sums complete dim=1
+                for (int lane = 0; lane < OutputLanes; ++lane) {
+#pragma HLS UNROLL
+                    sums[lane] = arithmetic::begin_with_frozen_bias_order<
+                        numeric::conv1_acc_t>(bias_by_lane[lane][group]);
+                }
                 for (int kernel_row = 0;
                      kernel_row < config::kConv1KernelHeight; ++kernel_row) {
                     for (int kernel_column = 0;
@@ -187,20 +229,26 @@ void conv1_static_line_buffer(const numeric::data_t* input,
                                 continue;
                             }
                         }
-                        const int weight_index =
-                            (output_channel * config::kConv1KernelHeight +
-                             kernel_row) *
-                                config::kConv1KernelWidth +
-                            kernel_column;
-                        arithmetic::accumulate_product(
-                            sum, weights[weight_index],
-                            window[kernel_row][kernel_column]);
+                        const numeric::data_t sample =
+                            window[kernel_row][kernel_column];
+                        for (int lane = 0; lane < OutputLanes; ++lane) {
+#pragma HLS UNROLL
+                            arithmetic::accumulate_product(
+                                sums[lane],
+                                weights_by_lane[lane][group][kernel_row]
+                                               [kernel_column],
+                                sample);
+                        }
                     }
                 }
-                output[chw_offset(output_channel, output_row, output_column,
-                                  output_height, output_width)] =
-                    arithmetic::activate_and_narrow<numeric::data_t>(sum,
-                                                                      true);
+                for (int lane = 0; lane < OutputLanes; ++lane) {
+                    const int output_channel = group * OutputLanes + lane;
+                    output[chw_offset(output_channel, output_row,
+                                      output_column, output_height,
+                                      output_width)] =
+                        arithmetic::activate_and_narrow<numeric::data_t>(
+                            sums[lane], true);
+                }
             }
         }
     }
@@ -412,7 +460,7 @@ void conv2d_pointwise(const numeric::data_t* input,
     }
 }
 
-template <bool ReplicateOnly>
+template <bool ReplicateOnly, int Conv1OutputLanes>
 bool run_line_buffer_impl(
     const numeric::data_t* input, const numeric::data_t* conv1_weights,
     const numeric::data_t* conv1_bias,
@@ -444,7 +492,7 @@ bool run_line_buffer_impl(
     const int conv3_padding =
         same_padding ? config::kConv3SamePadHeight : 0;
 
-    conv1_static_line_buffer<ReplicateOnly>(
+    conv1_static_line_buffer<ReplicateOnly, Conv1OutputLanes>(
         input, conv1_weights, conv1_bias, conv1_output, shape.input.height,
         shape.input.width, shape.conv1.height, shape.conv1.width,
         conv1_padding, padding_mode);
@@ -476,7 +524,7 @@ extern "C" int srcnn_hls_line_buffer_top(
         padding_mode > static_cast<int>(PaddingMode::kReplicateSame)) {
         return -1;
     }
-    return run_line_buffer_impl<false>(
+    return run_line_buffer_impl<false, 1>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,
@@ -494,7 +542,25 @@ extern "C" int srcnn_hls_line_buffer_replicate_top(
     const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width) {
-    return run_line_buffer_impl<true>(
+    return run_line_buffer_impl<true, 1>(
+               input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
+               conv3_weights, conv3_bias, conv1_output, conv2_output,
+               conv3_output, input_height, input_width,
+               PaddingMode::kReplicateSame)
+               ? 0
+               : -1;
+}
+
+extern "C" int srcnn_hls_line_buffer_replicate_oc2_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width) {
+    return run_line_buffer_impl<true, 2>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,
