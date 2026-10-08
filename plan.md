@@ -444,9 +444,16 @@ Mac 门禁为 float 4/4、host `ap_fixed` 7/7、ASan/UBSan 4/4；replicate 专�
 13×17、1×1、33×29 上逐层对比通用 top，float 逐位相等、fixed 精确相等。证据见
 `results/p2_3-mac-a-replicate-host.md`。
 
-下一步只综合 A 的新 top，分别保存 5 ns 与 6 ns component。若 5 ns 已通过且 MAC
-II 仍为 1，则不为时序启动 B；若仍失败，再从 A 建立独立乘法流水实验，不能把 A/B
-合并后才测。
+MAC-A 的独立 5 ns/6 ns 综合已完成。5 ns top slack 从 `-0.54 ns` 改善到
+`+0.05 ns`，Conv1/MAC slack 为 `+0.23 ns`，MAC II 与 latency 保持 `1/5187`；
+BRAM/DSP 保持 `136/13`，FF/LUT 降至 `7661/13982`。6 ns Conv1 slack 为
+`+0.72 ns`，但 top/Conv3 均为 `+0.04 ns`，说明新关键路径已转移到 Conv3。
+因此按预定门禁停止 B，不再为 Conv1 时序插入乘法寄存器。
+
+MAC-A 作为5 ns HLS通过的独立检查点封存。下一阶段转入吞吐优化，先在新分支只试
+Conv1 两个输出通道并行：两个通道共享同一个 window sample，但使用独立 accumulator
+和分 bank 权重，每个通道内部仍按原 81 项顺序累加。目标是把 Conv1 每像素约
+`64×81` 次迭代降到约 `(64/2)×81`，同时重新检查5 ns、II、DSP、BRAM和逐层数值。
 
 #### 目标实现
 
