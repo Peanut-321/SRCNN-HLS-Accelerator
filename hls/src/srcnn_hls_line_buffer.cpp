@@ -60,7 +60,7 @@ numeric::data_t read_conv1_stream_sample(const numeric::data_t* input,
                             input_width)];
 }
 
-template <bool ReplicateOnly, int OutputLanes>
+template <bool ReplicateOnly, int OutputLanes, bool IncrementalWriteback>
 void conv1_static_line_buffer(const numeric::data_t* input,
                               const numeric::data_t* weights,
                               const numeric::data_t* bias,
@@ -136,6 +136,7 @@ void conv1_static_line_buffer(const numeric::data_t* input,
 
     const int stream_height = input_height + 2 * padding;
     const int stream_width = input_width + 2 * padding;
+    const int output_plane_size = output_height * output_width;
 
     for (int stream_row = 0; stream_row < stream_height; ++stream_row) {
         for (int stream_column = 0; stream_column < stream_width;
@@ -200,6 +201,12 @@ void conv1_static_line_buffer(const numeric::data_t* input,
                 stream_row - (config::kConv1KernelHeight - 1);
             const int output_column =
                 stream_column - (config::kConv1KernelWidth - 1);
+            // The writeback experiment walks CHW planes by recurrence instead
+            // of rebuilding `(channel * height + row) * width + column` for
+            // every lane. The compile-time switch keeps the frozen OC2 top as
+            // an exact synthesis control in this same source file.
+            int next_output_index =
+                output_row * output_width + output_column;
 
             for (int group = 0; group < kOutputChannelGroups; ++group) {
                 numeric::conv1_acc_t sums[OutputLanes];
@@ -242,12 +249,20 @@ void conv1_static_line_buffer(const numeric::data_t* input,
                     }
                 }
                 for (int lane = 0; lane < OutputLanes; ++lane) {
-                    const int output_channel = group * OutputLanes + lane;
-                    output[chw_offset(output_channel, output_row,
-                                      output_column, output_height,
-                                      output_width)] =
-                        arithmetic::activate_and_narrow<numeric::data_t>(
-                            sums[lane], true);
+                    if (IncrementalWriteback) {
+                        output[next_output_index] =
+                            arithmetic::activate_and_narrow<numeric::data_t>(
+                                sums[lane], true);
+                        next_output_index += output_plane_size;
+                    } else {
+                        const int output_channel =
+                            group * OutputLanes + lane;
+                        output[chw_offset(output_channel, output_row,
+                                          output_column, output_height,
+                                          output_width)] =
+                            arithmetic::activate_and_narrow<numeric::data_t>(
+                                sums[lane], true);
+                    }
                 }
             }
         }
@@ -460,7 +475,8 @@ void conv2d_pointwise(const numeric::data_t* input,
     }
 }
 
-template <bool ReplicateOnly, int Conv1OutputLanes>
+template <bool ReplicateOnly, int Conv1OutputLanes,
+          bool Conv1IncrementalWriteback>
 bool run_line_buffer_impl(
     const numeric::data_t* input, const numeric::data_t* conv1_weights,
     const numeric::data_t* conv1_bias,
@@ -492,7 +508,8 @@ bool run_line_buffer_impl(
     const int conv3_padding =
         same_padding ? config::kConv3SamePadHeight : 0;
 
-    conv1_static_line_buffer<ReplicateOnly, Conv1OutputLanes>(
+    conv1_static_line_buffer<ReplicateOnly, Conv1OutputLanes,
+                             Conv1IncrementalWriteback>(
         input, conv1_weights, conv1_bias, conv1_output, shape.input.height,
         shape.input.width, shape.conv1.height, shape.conv1.width,
         conv1_padding, padding_mode);
@@ -524,7 +541,7 @@ extern "C" int srcnn_hls_line_buffer_top(
         padding_mode > static_cast<int>(PaddingMode::kReplicateSame)) {
         return -1;
     }
-    return run_line_buffer_impl<false, 1>(
+    return run_line_buffer_impl<false, 1, false>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,
@@ -542,7 +559,7 @@ extern "C" int srcnn_hls_line_buffer_replicate_top(
     const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width) {
-    return run_line_buffer_impl<true, 1>(
+    return run_line_buffer_impl<true, 1, false>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,
@@ -560,7 +577,25 @@ extern "C" int srcnn_hls_line_buffer_replicate_oc2_top(
     const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width) {
-    return run_line_buffer_impl<true, 2>(
+    return run_line_buffer_impl<true, 2, false>(
+               input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
+               conv3_weights, conv3_bias, conv1_output, conv2_output,
+               conv3_output, input_height, input_width,
+               PaddingMode::kReplicateSame)
+               ? 0
+               : -1;
+}
+
+extern "C" int srcnn_hls_line_buffer_replicate_oc2_writeback_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width) {
+    return run_line_buffer_impl<true, 2, true>(
                input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
                conv3_weights, conv3_bias, conv1_output, conv2_output,
                conv3_output, input_height, input_width,

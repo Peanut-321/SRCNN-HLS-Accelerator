@@ -103,6 +103,9 @@ void run_case(const char* name, int height, int width,
     std::vector<data_t> oc2_1(element_count(shape.conv1));
     std::vector<data_t> oc2_2(element_count(shape.conv2));
     std::vector<data_t> oc2_3(element_count(shape.conv3));
+    std::vector<data_t> writeback1(element_count(shape.conv1));
+    std::vector<data_t> writeback2(element_count(shape.conv2));
+    std::vector<data_t> writeback3(element_count(shape.conv3));
 
     const int mode = static_cast<int>(padding_mode);
     if (srcnn_hls::srcnn_hls_top(
@@ -149,6 +152,18 @@ void run_case(const char* name, int height, int width,
         require_equal(name, "OC2 conv1", replicate1, oc2_1);
         require_equal(name, "OC2 conv2", replicate2, oc2_2);
         require_equal(name, "OC2 conv3", replicate3, oc2_3);
+
+        if (srcnn_hls::srcnn_hls_line_buffer_replicate_oc2_writeback_top(
+                input.data(), conv1_weights.data(), conv1_bias.data(),
+                conv2_weights.data(), conv2_bias.data(), conv3_weights.data(),
+                conv3_bias.data(), writeback1.data(), writeback2.data(),
+                writeback3.data(), height, width) != 0) {
+            throw std::runtime_error(std::string(name) +
+                                     ": OC2 writeback top failed");
+        }
+        require_equal(name, "writeback conv1", oc2_1, writeback1);
+        require_equal(name, "writeback conv2", oc2_2, writeback2);
+        require_equal(name, "writeback conv3", oc2_3, writeback3);
     }
     std::cout << "PASS: " << name << '\n';
 }

@@ -28,6 +28,8 @@ host-fixed:
 # SRCNN_HLS_TOP=srcnn_hls_line_buffer_replicate_top
 # Conv1 two-output-channel throughput experiment:
 # SRCNN_HLS_TOP=srcnn_hls_line_buffer_replicate_oc2_top
+# OC2 incremental CHW writeback-address experiment:
+# SRCNN_HLS_TOP=srcnn_hls_line_buffer_replicate_oc2_writeback_top
 vitis-export:
 	@test -n "$(SRCNN_HLS_PART)" || \
 		(echo "SRCNN_HLS_PART is required (use the exact P0a part)"; exit 2)
