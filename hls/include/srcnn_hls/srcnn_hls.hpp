@@ -117,4 +117,16 @@ extern "C" int srcnn_hls_line_buffer_replicate_oc2_top(
     numeric::data_t* conv2_output, numeric::data_t* conv3_output,
     int input_height, int input_width);
 
+// Second and final Conv1 output-channel unroll factor. Four lanes share each
+// window sample while preserving the original 81-term order per channel.
+extern "C" int srcnn_hls_line_buffer_replicate_oc4_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width);
+
 }  // namespace srcnn_hls

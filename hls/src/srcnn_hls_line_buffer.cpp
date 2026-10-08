@@ -569,4 +569,22 @@ extern "C" int srcnn_hls_line_buffer_replicate_oc2_top(
                : -1;
 }
 
+extern "C" int srcnn_hls_line_buffer_replicate_oc4_top(
+    const numeric::data_t* input, const numeric::data_t* conv1_weights,
+    const numeric::data_t* conv1_bias,
+    const numeric::data_t* conv2_weights,
+    const numeric::data_t* conv2_bias,
+    const numeric::data_t* conv3_weights,
+    const numeric::data_t* conv3_bias, numeric::data_t* conv1_output,
+    numeric::data_t* conv2_output, numeric::data_t* conv3_output,
+    int input_height, int input_width) {
+    return run_line_buffer_impl<true, 4>(
+               input, conv1_weights, conv1_bias, conv2_weights, conv2_bias,
+               conv3_weights, conv3_bias, conv1_output, conv2_output,
+               conv3_output, input_height, input_width,
+               PaddingMode::kReplicateSame)
+               ? 0
+               : -1;
+}
+
 }  // namespace srcnn_hls
