@@ -719,3 +719,41 @@ harness/control-interface combination. The correct next step is a standalone
 SystemVerilog testbench for `srcnn_axis_dataflow_cosim_13x17_top`, using the
 existing generated RTL and vectors, rather than changing Conv/DATAFLOW/FIFO
 implementation or proceeding to Vivado integration.
+
+---
+
+# Fresh dynamic 13x17 port-trace gate (commit `7d8b5eb`)
+
+A new component was created without reusing an older component or its build
+cache:
+
+```text
+Component: srcnn_axis_dataflow_cosim_case3_dynamic_porttrace_5ns
+Top:       srcnn_axis_dataflow_cosim_top
+Part:      xck26-sfvc784-2LV-c
+Clock:     5 ns
+```
+
+Its design flags were `-std=c++14 -DSRCNN_HLS_FIXED_POINT=1`; its testbench
+flags added only `-DSRCNN_AXIS_DATAFLOW_TEST_CASE=3`. In particular, it did
+not define `SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP`.
+
+Co-simulation used XSIM/Verilog with `trace_level=port`, `wave_debug=false`,
+DATAFLOW profiling disabled, and FIFO sizing disabled.
+
+| Gate | Result |
+|---|---|
+| C simulation | PASS: 221 AXIS words; final AXIS/DATAFLOW output exactly matches OC4 |
+| C synthesis | PASS: estimated Fmax 273.97 MHz |
+| RTL co-simulation | stalled at `0 / 1 [n/a] @ 113000` for more than 95 CPU seconds; stopped |
+
+This is the missing matrix cell. Current dynamic 5x7 port-trace co-simulation
+passes, while current dynamic 13x17 port-trace co-simulation stalls under the
+same top, part, clock, and trace settings. The fixed 13x17 wrapper and its
+5-bit AXI-Lite address map are therefore not the root cause.
+
+No DUT/FIFO/pragma changes were made. Do not start a standalone SystemVerilog
+TB yet. The next evidence must compare the actual AXI-Lite startup waveforms
+for the passing dynamic 5x7 and failing dynamic 13x17 auto-generated harnesses,
+then identify whether the 13x17 vector depth changes the generated AXI source,
+AXIS source, or model-memory setup.
