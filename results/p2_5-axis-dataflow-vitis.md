@@ -173,3 +173,123 @@ functional-preserving source change, then re-run the same four gates:
 C simulation, three-case RTL co-simulation, deployment synthesis, and IP
 export. Only after a completed co-sim and an overlapping dataflow schedule
 should a per-stage bottleneck analysis decide whether Conv2 needs optimization.
+
+---
+
+# Canonical DATAFLOW re-validation (commit `72e7f7e`)
+
+## Revision under test
+
+| Item | Value |
+|---|---|
+| Commit | `72e7f7e Make SRCNN dataflow region canonical` |
+| Vitis HLS | 2026.1, build 6493734 |
+| Part / clock | `xck26-sfvc784-2LV-c` / 5 ns |
+| Deployment top | `srcnn_axis_dataflow_top` |
+| Co-sim top | `srcnn_axis_dataflow_cosim_top` |
+
+This re-run used the pushed minimal structural fix: the 8,129 model values are
+loaded before the DATAFLOW region into layer-local arrays. No arithmetic,
+padding, OC4, FIFO-depth, numeric-type, or Conv2-parallelism change was made.
+
+## Gate results
+
+### C simulation: PASS
+
+The Vitis C-simulation run passed 1 x 1, 5 x 7, and 13 x 17 replicate-edge
+cases. It also reported an exact final-output match to OC4, correct AXIS word
+counts, `TKEEP=TSTRB=0xF`, and TLAST on only the final output word.
+
+### RTL co-simulation: FAIL / incomplete
+
+The generated harness again compiled and invoked
+`srcnn_axis_dataflow_cosim_top` in Verilog XSIM. C-testbench preparation
+passed all three cases. RTL simulation reached transaction `1 / 3` at
+simulation time `254308000` and then made no reported transaction progress for
+more than three minutes, despite XSIM continuing to consume CPU. No explicit
+stream-deadlock or timeout diagnostic was emitted. The stalled XSIM run was
+stopped manually; consequently no total co-simulation cycle count is available.
+
+This is a repeatable gate failure and prevents Vivado integration.
+
+### Deployment synthesis and IP export: completed
+
+The fixed-size deployment top synthesized and exported successfully. The
+canonical DATAFLOW diagnostics are gone: this run contains no `HLS 214-114`
+or `HLS 200-471` message.
+
+| Metric | Result |
+|---|---:|
+| Estimated Fmax | 273.97 MHz |
+| 5 ns timing | PASS by Fmax estimate |
+| Top latency | 512,719,257 cycles |
+| Top interval | 512,719,258 cycles |
+| Top hierarchy slack | 0.00 ns |
+| DATAFLOW region slack | 0.04 ns |
+| BRAM | 247 (85%) |
+| DSP | 86 (6%) |
+| LUT | 24,375 (20%) |
+| FF | 9,287 (3%) |
+| URAM | 0 |
+
+The final exported IP is:
+
+```text
+C:\fpga\vitis-workspace\srcnn_axis_dataflow_deployment_255x255_5ns\hls\impl\export.zip
+```
+
+## DATAFLOW result
+
+The report now shows a short, separate model preload stage:
+
+```text
+load_runtime_model: latency/interval 8,201 / 8,201 cycles
+```
+
+There is no longer a `model_mem_rd_proc` that encloses the convolution stages.
+The core is identified as a DATAFLOW region. The configured stream FIFO depths
+remain unchanged:
+
+| Channel | Depth |
+|---|---:|
+| `input_pixels` | 64 |
+| `conv1_features` | 128 |
+| `conv2_features` | 64 |
+| `output_pixels` | 64 |
+
+The stage estimates show overlap rather than the prior sum of all stages:
+
+| Stage | Latency / interval (cycles) |
+|---|---:|
+| `axis_to_scalar` | 65,027 / 65,026 |
+| `conv1_stream` | 512,711,051 / 512,711,051 |
+| `conv2_stream` | 15,540,976 / 15,540,976 |
+| `conv3_stream` | 170,178,228 / 170,178,228 |
+| `scalar_to_axis` | 65,027 / 65,026 |
+| DATAFLOW core | 512,711,051 / 512,711,052 |
+
+The core latency equals the maximum stage estimate (`conv1_stream`) rather
+than the sum of Conv1, Conv2, and Conv3, which is evidence that the canonical
+DATAFLOW structure is now recognized. Conv1 is the current estimated
+throughput bottleneck; Conv2 is not. This synthesis run emitted no explicit
+array-port-conflict, memory-port, dependency, or schedule-failure diagnostic.
+
+## Interfaces
+
+The exported deployment top remains correct:
+
+- AXI4-Stream `input_r` and `output_r`: 32-bit TDATA, 4-bit TKEEP/TSTRB,
+  TLAST, TVALID, and TREADY.
+- Read-only `m_axi_model_mem`: 32-bit data, 64-bit address, maximum read burst
+  length 16.
+- 32-bit `s_axi_control` and `ap_ctrl_hs`; model pointer registers are
+  `model_1` at 0x10 and `model_2` at 0x14.
+
+## Decision
+
+The source-level DATAFLOW repair is successful in synthesis, but the complete
+Windows Vitis gate is still **not passed** because RTL co-simulation does not
+finish. Do not enter Vivado or optimize Conv2 yet. The next debugging task is
+to diagnose the XSIM transaction-2 stall using the generated RTL testbench and
+DATAFLOW trace/FIFO profiling, while preserving the verified canonical
+structure.
