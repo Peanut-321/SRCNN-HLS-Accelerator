@@ -895,3 +895,147 @@ verification stage is an independent SystemVerilog RTL testbench for
 vectors and explicit AXI-Lite, m_axi-read, and AXIS agents. Do not add further
 Vitis auto-co-sim size/configuration experiments and do not modify the SRCNN
 implementation.
+
+---
+
+# Independent SystemVerilog RTL gate: 13x17 PASS (2026-10-10)
+
+The automatic co-sim fallback is now implemented and tested. Both the dynamic
+`srcnn_axis_dataflow_cosim_top` and fixed
+`srcnn_axis_dataflow_cosim_13x17_top` synthesized RTL pass an independent XSIM
+SystemVerilog testbench using the original mode-3 C vectors. No Vitis UVM,
+autotb, force, FIFO-sizing rewrite, C synthesis, or design-code change is used.
+
+Verification files added:
+
+- `tests/rtl/srcnn_axis_independent_tb.sv`
+- `tests/rtl/README.md`
+- `hls/scripts/run_axis_independent_rtl.ps1`
+
+The source/report checkout before this change was `937fa04`. The HLS design
+and C testbench sources are unchanged from `7d8b5eb` (verified with Git diff).
+Tool: XSIM/Vivado 2026.1 build 6511674; clock: 5 ns; RTL language: Verilog
+with SystemVerilog TB; part of the existing synthesis: `xck26-sfvc784-2LV-c`.
+
+## Completed verification
+
+| Gate | Dynamic 13x17 | Fixed 13x17 |
+|---|---:|---:|
+| Independent RTL result | PASS | PASS |
+| Transactions | 1 | 1 |
+| Accepted input words | 221 | 221 |
+| Accepted output words | 221 | 221 |
+| Bitwise output comparisons | 221/221 | 221/221 |
+| Accepted model read words / unique addresses | 8129 / 8129 | 8129 / 8129 |
+| Model AR bursts | 509 | 509 |
+| Output stall cycles tested | 13 | 13 |
+| First DUT start sample, cycle | 44 | 36 |
+| First DUT ap_done sample, cycle | 478121 | 478102 |
+| Start to RTL ap_done, cycles | 478077 | 478066 |
+| Later AXI-Lite done readback, cycle | 478475 | 478467 |
+| Total TB clock cycles (including reset/poll/finish) | 478495 | 478487 |
+| Total simulated time | 2392475 ns | 2392435 ns |
+
+Both runs check TKEEP/TSTRB=0xF, TLAST only on output 220, no extra input or
+output beats, and stability of all AXIS output payload/sideband signals while
+TREADY is low. Real DUT controls are checked for X/Z after reset. The AXI read
+model verifies address range, 32-bit alignment/size, INCR bursts, IDs, and
+coverage of every model element. AXI-Lite B/R responses and the final done
+register are checked. No timeout or functional stream deadlock occurs.
+
+The reported start-to-done cycle count is sampled from actual internal DUT
+control wires, not the later software polling response. It is measured under
+this testbench's memory/source/sink behavior; it is not routed timing, a
+255x255 frame latency, or a board FPS result.
+
+One expected elaboration warning remains: an unused model-memory write-side
+output (`m_axi_model_mem_AWID`) is unconnected. The memory interface is read
+only in this test; its AWVALID/WVALID are explicitly checked to stay zero.
+There are no compilation errors or runtime unknown-control/data failures in
+the passing runs.
+
+### Actual startup/completion evidence
+
+| Signal/event | Dynamic cycle | Fixed cycle | Observation |
+|---|---:|---:|---|
+| Reset released | between cycles 20 and 21 | same | at 100 ns |
+| Model-low write response | 27 | 27 | base address 0x10000000 at offset 0x10 |
+| Model-high write response | 31 | 31 | zero at offset 0x14 |
+| Height write response | 35 | n/a | 13 at offset 0x1c |
+| Width write response | 39 | n/a | 17 at offset 0x24 |
+| Start write response | 43 | 35 | 1 at offset 0x00 |
+| First accepted input AXIS beat | 46 | 38 | TVALID && TREADY |
+| First model AR handshake | 52 | 44 | real m_axi request accepted |
+| All model data accepted | 8744 | 8736 | all 8129 elements loaded |
+| First accepted output AXIS beat | 111824 | 111815 | output 0 equals 0xfffffff7 |
+| Real RTL ap_done | 478121 | 478102 | DUT finishes |
+
+### Scoreboard negative check
+
+A separate dynamic-top run changed only the first golden output to zero.
+The scoreboard stopped at the first actual output:
+
+```text
+Fatal: Output 0 expected=00000000 actual=fffffff7
+Time: 559117500 ps
+PASS negative check: corrupt golden was rejected at output 0
+```
+
+This checks that the success gate is reached through real RTL output
+comparison rather than a test that never invokes or observes the DUT.
+
+## Artifact provenance and paths
+
+Dynamic synthesized RTL came from:
+`C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_case3_dynamic_porttrace_5ns\hls\syn\verilog`.
+Fixed synthesized RTL came from:
+`C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_13x17_porttrace_5ns\hls\syn\verilog`.
+Both tests use the dynamic component's existing mode-3 vectors in
+`hls\sim\tv\cdatafile`. The C testbench already checked these outputs against
+the frozen OC4 reference. Converted vector SHA-256 hashes are:
+
+```text
+input.hex:
+CCCE7288FCC1F7971DEFEE0074C347B676D775D70CCA6AE4301D74737174575E
+expected.hex:
+180DAF374F86C240B3D95E3545E59F8078B3B1E63A1427EC8326858D3D9DD802
+model.hex:
+D8336E208F69DC007E4C5E70D7E6420B7E7FFCFD419E0A78F9DDCA59E24C4285
+```
+
+Synthesized top RTL SHA-256 hashes (all other RTL hashes are in manifest.json):
+
+```text
+dynamic srcnn_axis_dataflow_cosim_top.v:
+720DB97751B7D9F1E47A4C8E828A6902D4E621B2F9CEED21D103126429EE67E0
+fixed srcnn_axis_dataflow_cosim_13x17_top.v:
+B4505FF79DD84B55E5912015096D5872CF10D6454CFB9A7F822F7BF9C2972CF5
+```
+
+Closed WDBs, simulation/compilation logs and manifests are saved outside Git:
+
+```text
+C:\Users\xzype\Documents\Codex\2026-10-08\windows-codex-mac-github-windows-codex\outputs\rtl-13x17\dynamic\
+C:\Users\xzype\Documents\Codex\2026-10-08\windows-codex-mac-github-windows-codex\outputs\rtl-13x17\fixed\
+C:\Users\xzype\Documents\Codex\2026-10-08\windows-codex-mac-github-windows-codex\outputs\rtl-13x17\negative\
+```
+
+Each directory contains `independent_srcnn.wdb`, `simulate.log`, `compile.log`,
+`elaborate.log`, and `manifest.json`. Scratch copied RTL and converted vectors
+remain under the chat workspace's `work/independent-rtl/`; no generated RTL,
+binary vector, WDB or temporary Vitis project is submitted to Git.
+
+## Updated conclusion and next step
+
+The 13x17 deterministic frame works on both dynamic and fixed RTL, including
+actual AXI-Lite startup, model reads, DATAFLOW computation, AXIS backpressure,
+and completion. This narrows the previous failure to the automatic
+co-simulation environment or its drivers for this case. It does not identify
+the specific defective UVM/tool statement, and does not support the earlier
+claim that the dynamic wrapper or 5-bit AXI-Lite map itself was faulty.
+
+The independent small-frame RTL functional gate is now passed. Preserve this
+testbench as the reproducible replacement for the blocked automatic harness.
+The next separate gate is to verify the final fixed 255x255 deployment top's
+5 ns synthesis, DATAFLOW/interface reports and IP export. No Vivado Block
+Design, implementation, PYNQ or board work was started in this step.
