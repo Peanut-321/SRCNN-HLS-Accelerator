@@ -529,3 +529,49 @@ and RTL co-simulate this fixed top in a new component. If it passes, the
 dynamic height/width co-simulation wrapper is the blocker and does not describe
 the fixed deployment IP. If its start signals remain unknown, the fault is in
 the more general generated AXI-Lite/m_axi co-simulation harness.
+
+---
+
+# Fixed 13x17 top RTL co-simulation diagnostic (commit `7fc62cb`)
+
+## Independent component
+
+A new component was created outside the repository build tree:
+
+```text
+Component: srcnn_axis_dataflow_cosim_13x17_5ns
+Top:       srcnn_axis_dataflow_cosim_13x17_top
+Part:      xck26-sfvc784-2LV-c
+Clock:     5 ns
+```
+
+Design flags were `-std=c++14 -DSRCNN_HLS_FIXED_POINT=1`. The testbench used
+case 3 together with `-DSRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP=1`.
+The logs confirm both the synthesis top and generated co-simulation harness
+used `srcnn_axis_dataflow_cosim_13x17_top`.
+
+## Gates
+
+| Gate | Result | Evidence |
+|---|---|---|
+| C simulation | PASS | 13x17 AXIS/DATAFLOW output exactly matches OC4 |
+| C synthesis | PASS | completed in 1m24s; estimated Fmax 273.97 MHz |
+| RTL co-simulation | incomplete | remained `0 / 1 [0.00%] @ 113000 ps` |
+
+The all-trace co-simulation was configured with XSIM, Verilog,
+`trace_level=all`, `wave_debug=true`, and dataflow profiling. It elaborated
+the fixed top with `-debug all`. After more than two minutes without a
+transaction or simulation-time update, XSIM was stopped and the WDB retained:
+
+```text
+C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_13x17_5ns\hls\sim\verilog\srcnn_axis_dataflow_cosim_13x17_top.wdb
+```
+
+## Conclusion
+
+The fixed top removes the dynamic `height` and `width` AXI-Lite arguments but
+reproduces the same 113000 ps, zero-transaction stop. Therefore the dynamic
+wrapper is not the fault source. Together with the all-trace dynamic-wrapper
+run, this points to a broader Vitis 2026.1 AXI-Lite/m_axi co-simulation harness
+startup problem. Conv code, DATAFLOW, internal FIFOs, and pragmas remain
+unmodified and are not implicated by this result.
