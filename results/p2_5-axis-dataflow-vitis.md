@@ -371,3 +371,26 @@ the DUT unchanged while inspecting the generated XSIM waveform / dataflow
 monitor for the 13x17 run, then identify the producer/consumer channel that
 prevents forward progress. Vivado integration and Conv2 optimization remain
 blocked.
+
+## Minimal AXIS verification-adapter diagnostic
+
+Code inspection confirms balanced counts for the failed 13x17 transaction:
+
+```text
+axis_to_scalar: 221
+Conv1 output / Conv2 input: 221 * 64 = 14,144
+Conv2 output / Conv3 input: 221 * 32 = 7,072
+Conv3 output / scalar_to_axis: 221
+```
+
+The pipeline is linear and has no feedback channel. The next checkpoint adds
+`depth=65025` to the input and output AXIS interface pragmas of both top-level
+wrappers. Per AMD UG1399, this depth is the maximum sample capacity of the RTL
+co-simulation verification adapter; it does not allocate a full-frame FIFO in
+the synthesized AXIS datapath. This change does not alter arithmetic, internal
+FIFO depths, padding, loop structure, or interfaces visible to Vivado.
+
+Repeat mode 3 first under the same part, 5 ns clock, and fixed-point flags. A
+PASS attributes the prior stop to an underspecified verification adapter. A
+repeat failure rejects that hypothesis and requires waveform inspection of
+the four internal DATAFLOW channel handshakes before any FIFO depth is changed.

@@ -30,6 +30,12 @@ host must send exactly 65,025 input words with all four bytes valid and `TLAST`
 on the final word. The hardware datapath consumes a fixed frame length and does
 not branch on the incoming sidebands.
 
+Both top-level AXIS pragmas declare `depth=65025`. In Vitis this value sizes
+the verification adapter used for RTL co-simulation; it is the maximum number
+of samples supplied or retained by the testbench adapter. It does **not** add a
+65,025-word frame FIFO to the exported AXI4-Stream hardware interface. The
+internal DATAFLOW FIFO depths remain the separate values listed below.
+
 The top uses `ap_ctrl_hs` through AXI4-Lite. It has one additional `m_axi`
 master named `model_mem`; the AXI4-Lite `model` register holds the physical
 address of a contiguous model buffer in PS-accessible DDR.
@@ -126,3 +132,10 @@ For the Tcl flow, set the environment variable of the same name before running
 `-DSRCNN_AXIS_DATAFLOW_TEST_CASE=N` to the testbench C++ compile flags. Keep all
 design sources, top function, part, clock, and numeric flags identical across
 the runs.
+
+The first isolation run found 1x1 and 5x7 passing while 13x17 stalled before
+completing its only transaction. Because the token counts are balanced across
+the acyclic pipeline (`221 -> 14,144 -> 7,072 -> 221`), the next minimal
+diagnostic is to synthesize the explicit top-level AXIS adapter depth above and
+repeat mode 3. Only if that run still stalls should waveform/FIFO handshakes be
+used to attribute an internal producer/consumer blockage.
