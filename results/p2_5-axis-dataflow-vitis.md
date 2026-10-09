@@ -685,3 +685,37 @@ TB, reproduce a fresh dynamic 5x7 component from the same current commit and
 co-simulation trace settings as the fixed 13x17 component. That controls for
 source revision and trace configuration while retaining an input size known to
 be small.
+
+---
+
+# Controlled co-simulation matrix (commit `24bbbb8`)
+
+Three fresh components were created outside the repository and synthesized from
+the same current source and toolchain. No DUT, FIFO, pragma, arithmetic, or
+testbench source was changed.
+
+| Component | C top | Image | Trace mode | RTL co-sim result |
+|---|---|---:|---|---|
+| `srcnn_axis_dataflow_cosim_case2_current_alltrace_5ns` | dynamic `srcnn_axis_dataflow_cosim_top` | 5x7 | `all`, `wave_debug=true` | stalled at `0 / 1 @ 113000`; stopped after sustained XSIM activity |
+| `srcnn_axis_dataflow_cosim_13x17_porttrace_5ns` | fixed `srcnn_axis_dataflow_cosim_13x17_top` | 13x17 | `port` | stalled at `0 / 1 @ 113000`; stopped after more than 80 CPU seconds |
+| `srcnn_axis_dataflow_cosim_case2_current_porttrace_5ns` | dynamic `srcnn_axis_dataflow_cosim_top` | 5x7 | `port` | **PASS**, `1 / 1 @ 524353000 ps` |
+
+All three C simulations passed their OC4-equivalence checks; all three C
+syntheses completed at estimated Fmax 273.97 MHz.
+
+## What this proves
+
+1. Full trace / wave-debug instrumentation can independently cause the Vitis
+   auto co-sim run to stall, even for the small dynamic 5x7 test.
+2. The fixed 13x17 top also stalls with the same current source and *port*
+   trace, so full-trace instrumentation is not its sole cause.
+3. The current dynamic 5x7 port-trace run passes. The remaining controlled
+   discriminator is therefore the fixed top's reduced AXI-Lite control map:
+   removing `height` and `width` reduces `control_AWADDR` from 6 to 5 bits.
+
+The verified automatic RTL test is currently the dynamic 5x7 port-trace case.
+The fixed 13x17 automatic co-sim remains blocked by the generated Vitis 2026.1
+harness/control-interface combination. The correct next step is a standalone
+SystemVerilog testbench for `srcnn_axis_dataflow_cosim_13x17_top`, using the
+existing generated RTL and vectors, rather than changing Conv/DATAFLOW/FIFO
+implementation or proceeding to Vivado integration.
