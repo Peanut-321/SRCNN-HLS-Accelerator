@@ -306,3 +306,68 @@ not close the RTL gate; it only validates the diagnostic testbench. The next
 Windows action is to run independent RTL co-simulation for modes 1--3, then
 use modes 4 and 5 only if all three single-transaction runs pass. The decision
 table and exact compile definition are recorded in `docs/p2-axis-dataflow.md`.
+
+---
+
+# RTL co-simulation isolation re-validation (commit `063b180`)
+
+## Configuration
+
+Five dedicated Vitis component configurations were created in
+`C:\fpga\vitis-workspace`. Each keeps the same DUT
+`srcnn_axis_dataflow_cosim_top`, part `xck26-sfvc784-2LV-c`, 5 ns clock, and
+`-std=c++14 -DSRCNN_HLS_FIXED_POINT=1` design flags. Only the testbench flag
+changes:
+
+```text
+-DSRCNN_AXIS_DATAFLOW_TEST_CASE=N
+```
+
+DATAFLOW profiling, FIFO sizing, and port tracing were enabled for every
+component. No DUT, convolution, FIFO-depth, or pragma change was made.
+
+## Results
+
+| Mode | Calls | C testbench | RTL co-sim | Completion evidence |
+|---:|---|---|---|---|
+| 1 | 1x1 | PASS | **PASS** | `1 / 1` at `215833000 ps` |
+| 2 | 5x7 | PASS | **PASS** | `1 / 1` at `524353000 ps` |
+| 3 | 13x17 | PASS | **FAIL / incomplete** | remained `0 / 1` at `113000 ps`; stopped after CPU progress ceased |
+| 4 | 1x1 then 1x1 | Not run | Not run | mode 3 already fails as a single transaction |
+| 5 | 1x1 then 5x7 | Not run | Not run | mode 3 already fails as a single transaction |
+
+Mode 1 and mode 2 each use exactly one top-level call and completed in XSIM.
+The reported timestamps correspond to approximately 43,167 and 104,871 clock
+periods at 5 ns, respectively, including simulator/testbench overhead; Vitis
+does not print a separate integer RTL cycle total for these single-call runs.
+
+For mode 3, the C testbench passed the 13x17 output comparison and AXIS
+metadata checks, then XSIM began the one transaction but never reached a
+completion/progress line. Its CPU time stopped changing at 118.09 seconds
+while the log remained at `0 / 1`. The process was terminated manually.
+
+## FIFO / channel profiling
+
+The generated DATAFLOW channel inventory contains the expected channels:
+
+```text
+input_pixels_U     -> depth1.csv / chan_status1.csv
+conv1_features_U   -> depth2.csv / chan_status2.csv
+conv2_features_U   -> depth3.csv / chan_status3.csv
+output_pixels_U    -> depth4.csv / chan_status4.csv
+```
+
+The failed run generated the monitor RTL and channel metadata, but did not
+produce `chan_status*.csv` or `depth*.csv` runtime traces before it stopped.
+Consequently this run cannot identify a particular FIFO as full or empty
+without guessing. The isolation result is nevertheless decisive: the 13x17
+DATAFLOW RTL execution itself is the current failing case, rather than a
+second-start or changing-dimension harness issue.
+
+## Next action
+
+Do not run modes 4 or 5 until the single 13x17 transaction can complete. Keep
+the DUT unchanged while inspecting the generated XSIM waveform / dataflow
+monitor for the 13x17 run, then identify the producer/consumer channel that
+prevents forward progress. Vivado integration and Conv2 optimization remain
+blocked.
