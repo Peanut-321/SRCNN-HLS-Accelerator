@@ -194,3 +194,19 @@ accumulator-width equations, placeholder/TBD registry, float compatibility
 exception, and Vitis entry point. The P2.2a random-vector quantization results
 and their interpretation limits are recorded in
 [results/p2_2a-fixed-random.md](results/p2_2a-fixed-random.md).
+
+## P2.5 AXI-Stream + DATAFLOW checkpoint
+
+The deployment branch connects the three layers with internal streams and
+removes the full Conv1/Conv2 feature-map arrays. Run both Mac gates with:
+
+```sh
+make host-axis-dataflow
+```
+
+The fixed deployment wrapper accepts one 255x255 image through AXI4-Stream,
+returns one 255x255 image through AXI4-Stream, and reads one contiguous runtime
+model buffer from PS DDR. See
+[docs/p2-axis-dataflow.md](docs/p2-axis-dataflow.md) for the exact beat, TLAST,
+internal channel-order, and model-offset contracts. The Vitis 2026.1 synthesis
+and RTL co-simulation gate is intentionally separate from the Mac result.

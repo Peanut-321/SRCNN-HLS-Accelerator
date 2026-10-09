@@ -496,6 +496,20 @@ BRAM `154→152`、DSP `17→25`、LUT `14868→15960`、FF `7786→8229`。
 因此停止Conv1 UNROLL探索，不创建OC8；下一阶段进入overlay/板级集成，并分别测量
 kernel-only与PYNQ+DMA end-to-end，而不能把当前HLS top latency称为板级端到端结果。
 
+#### P2.5 AXI-Stream + DATAFLOW（2026-10-09 Mac checkpoint）
+
+已在 `deploy/srcnn-axis-dataflow` 加入固定 `255×255` 的部署 wrapper：图像输入/输出为
+32-bit AXI4-Stream，Conv1 OC4、Conv2、Conv3 之间改用 pixel-major `hls::stream`，
+顶层加入 `DATAFLOW`。Conv1/Conv3 只保留行缓存和当前输入行，不再分配完整 Conv1/Conv2
+feature map。正式参数不在仓库，因此本 checkpoint 使用一个 8,129 元素连续 model buffer，
+由 `m_axi model_mem` 从 PS DDR 读取；具体 packing 见 `docs/p2-axis-dataflow.md`。
+
+Mac float 与 host `ap_fixed` 测试均通过：1×1、5×7、13×17 replicate-edge 三组的最终
+输出分别与封存 OC4 精确一致，同时检查 65,025 帧协议所需的 word count、KEEP、STRB、
+LAST 生成逻辑。当前不得宣称 Vitis DATAFLOW 性能或 5 ns closure；下一 gate 是 Windows
+Vitis 2026.1 的 csim/csynth/cosim/export，并先读 schedule、memory-port 与 FIFO 报告再改
+结构或 pragma。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；
@@ -729,7 +743,8 @@ P0c    ⏳ TODO    — 尚无 KV260 overlay/DMA dummy 板测
 P1     ✅ DONE    — 课程 Golden 已验证并提交；内部回归资产继续冻结
 P2.1   ✅ DONE    — dual-target host 骨架、bitwise gate、fixed smoke 完成
 P2.2   🟡 PARTIAL — P2.2a 五向量 harness/饱和统计完成；P2.2b 等正式资产恢复到本机
-P2.3   🟡 PARTIAL — OC4 host/csynth/5 ns通过并封存；正式数值资产与部署wrapper仍未完成
+P2.3   ✅ DONE    — OC4 host/csynth/5 ns通过并封存；停止OC8探索
+P2.5   🟡 PARTIAL — AXIS/DATAFLOW wrapper与Mac门禁完成；等待Vitis csim/csynth/cosim/export
 P3     ⏳ TODO    — PYNQ/DMA/bitstream/板级正确性与计时未开始
 P4     🟡 PARTIAL — Status Update deck/PDF 已生成；baseline、消融、Final Report 未完成
 OPT    ⏭️ DEFERRED— MVP 前禁止启动
@@ -757,13 +772,17 @@ OPT    ⏭️ DEFERRED— MVP 前禁止启动
 
 ## 当前停止点与下一允许动作
 
-Golden 已提交，课程 core 契约与 bias 顺序已关闭。接下来按以下顺序并行推进：
+Golden 已提交，课程 core 契约与 bias 顺序已关闭。AXIS/DATAFLOW Mac checkpoint
+已完成。接下来按以下顺序并行推进：
 
-1. **Mac 主线：完成 P2.2b。**P2.2a 已完成；把 Golden 阶段使用的正式 weights、
+1. **Windows HLS gate：验证 P2.5。**运行 `vitis-axis-dataflow-export`，先完成小尺寸
+   csim/csynth/cosim，再综合/export固定255×255 top；保存DATAFLOW viewer、接口、
+   latency/interval、5 ns slack及资源报告。II异常先读schedule/dependency/port报告。
+2. **Mac 数值主线：完成 P2.2b。**P2.2a 已完成；把 Golden 阶段使用的正式 weights、
    `[0,1]` 课程输入和官方输出恢复到本机后，接入现有 harness，冻结动态范围、
    overflow、逐层误差和图像域 PSNR/SSIM 约定。
-2. **P0 外部关键路径：立即落实 x86 Vitis。**确认工具版本、part、clock 和板卡时段；
-   先做 dummy P0a，再保存 natural SRCNN baseline 的 csynth/schedule/resource 报告。
+3. **P0/P3 部署关键路径：**队友在 `deploy/vivado-pynq` 继续完成dummy BD/bit/hwh；
+   P2.5 export后，用SRCNN IP替换dummy并连接新增的 `m_axi model_mem` 到PS DDR。
 3. **Status Update：从 2026-10-06 起同步收集证据。**优先准备 workload 计算、架构图、
    Golden MSE、定点误差和首份 csynth；其中 255×255 workload 计算已完成于
    `results/workload-analysis-255x255.md`，未测指标必须标 `NOT MEASURED`。

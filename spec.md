@@ -341,13 +341,20 @@ AXI interface
 SRCNN HLS accelerator in PL
 ```
 
-下列接口项目为 TBD：
+P2.5 当前接口 checkpoint 已冻结以下项目，Vitis csynth/板级 gate 失败时才允许改动：
 
-- AXI4-Stream 还是 AXI4 memory-mapped 主接口；
-- 控制接口寄存器及启动/完成协议；
-- stream 数据宽度、每 beat 打包的元素数量、`TKEEP/TLAST` 规则；
-- 输入、输出、权重是单独 DMA transaction 还是权重常驻 PL；
-- 固定 `255×255` 帧在 DMA 中的长度、beat packing 和 frame boundary；
+- 图像输入、输出均为 AXI4-Stream；控制为 AXI4-Lite `ap_ctrl_hs`；
+- stream 为 32 bit，每 beat 一个 `data_t` 原始位模式；固定一帧 65,025 beat；
+- 输出 `TKEEP=TSTRB=0xF`，仅最后一 beat 置 `TLAST=1`；输入必须遵循同一约定；
+- 权重/bias 暂用一个连续 8,129 元素 model buffer，通过 `m_axi model_mem`
+  从 PS DDR 读取，物理地址由 AXI4-Lite `model` 寄存器传入；
+- model buffer 依次为 Conv1 W/B、Conv2 W/B、Conv3 W/B，逻辑布局保持 OIHW/O；
+- 内部 Conv1/Conv2 feature stream 采用 pixel-major channel order，不改变外部
+  Golden 的 CHW/OIHW/O 文件规范；
+- 完整 model packing 和 offset 表见 `docs/p2-axis-dataflow.md`。
+
+下列接口项目仍为 TBD：
+
 - buffer 字节数、alignment 和 cache flush/invalidate 责任；
 - 多帧连续执行时内部静态状态的 reset 规则；
 - timeout 与 DMA hang 的诊断和恢复方式。

@@ -74,14 +74,16 @@ set_tests_properties(srcnn_tests PROPERTIES LABELS "unit")
 function(add_srcnn_hls_library target_name fixed_point_mode)
     add_library(${target_name} STATIC
                 hls/src/srcnn_hls.cpp
-                hls/src/srcnn_hls_line_buffer.cpp)
+                hls/src/srcnn_hls_line_buffer.cpp
+                hls/src/srcnn_axis_dataflow.cpp)
     set_target_properties(${target_name} PROPERTIES
                           CXX_STANDARD 14
                           CXX_STANDARD_REQUIRED ON
                           CXX_EXTENSIONS OFF)
     target_include_directories(${target_name} PUBLIC hls/include)
     target_compile_definitions(${target_name}
-                               PUBLIC SRCNN_HLS_FIXED_POINT=${fixed_point_mode})
+                               PUBLIC SRCNN_HLS_FIXED_POINT=${fixed_point_mode}
+                                      SRCNN_AXIS_DATAFLOW_HOST_SIM=1)
     target_compile_options(${target_name} PRIVATE
                            -Wall -Wextra -Wpedantic -Wno-unknown-pragmas)
 endfunction()
@@ -134,6 +136,13 @@ add_test(NAME srcnn_hls_line_buffer_float COMMAND srcnn_hls_line_buffer_float)
 set_tests_properties(srcnn_hls_line_buffer_float PROPERTIES
                      LABELS "p2_3;line_buffer;float_bitwise"
                      TIMEOUT 120)
+
+add_executable(srcnn_axis_dataflow_float tests/test_srcnn_axis_dataflow.cpp)
+target_link_libraries(srcnn_axis_dataflow_float PRIVATE srcnn_hls_float)
+add_test(NAME srcnn_axis_dataflow_float COMMAND srcnn_axis_dataflow_float)
+set_tests_properties(srcnn_axis_dataflow_float PROPERTIES
+                     LABELS "p2_5;axis_dataflow;float_bitwise"
+                     TIMEOUT 180)
 
 # Mac/Linux fixed-point simulation uses Xilinx's open-source simulation-only
 # AP types at an explicit path or a pinned commit. Vitis synthesis must instead
@@ -196,6 +205,14 @@ if(SRCNN_BUILD_HLS_FIXED_SIM)
     set_tests_properties(srcnn_hls_line_buffer_fixed PROPERTIES
                          LABELS "p2_3;line_buffer;fixed"
                          TIMEOUT 180)
+
+    add_executable(srcnn_axis_dataflow_fixed
+                   tests/test_srcnn_axis_dataflow.cpp)
+    target_link_libraries(srcnn_axis_dataflow_fixed PRIVATE srcnn_hls_fixed)
+    add_test(NAME srcnn_axis_dataflow_fixed COMMAND srcnn_axis_dataflow_fixed)
+    set_tests_properties(srcnn_axis_dataflow_fixed PROPERTIES
+                         LABELS "p2_5;axis_dataflow;fixed"
+                         TIMEOUT 240)
 endif()
 
 # Independent cross-validation oracle (pure-Python, stdlib only).

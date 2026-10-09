@@ -4,8 +4,8 @@ AP_TYPES_CMAKE_ARG := $(if $(strip $(AP_TYPES_INCLUDE_DIR)),-DSRCNN_AP_TYPES_INC
 VITIS_HLS ?= vitis_hls
 SRCNN_HLS_TOP ?= srcnn_hls_top
 
-.PHONY: host-float host-fixed host-axis-dummy vitis-export \
-	vitis-axis-dummy-export
+.PHONY: host-float host-fixed host-axis-dummy host-axis-dataflow \
+	vitis-export vitis-axis-dummy-export vitis-axis-dataflow-export
 
 host-float:
 	cmake -S $(PROJECT_DIR) -B $(PROJECT_DIR)/build-p2-float \
@@ -28,6 +28,21 @@ host-axis-dummy:
 		--target srcnn_axis_dummy_test
 	ctest --test-dir $(PROJECT_DIR)/build-p0-axis-dummy \
 		-L axis_dummy --output-on-failure
+
+host-axis-dataflow:
+	cmake -S $(PROJECT_DIR) -B $(PROJECT_DIR)/build-p2-float \
+		-DCMAKE_BUILD_TYPE=Release -DSRCNN_ENABLE_ORACLE_TESTS=OFF
+	cmake --build $(PROJECT_DIR)/build-p2-float --parallel \
+		--target srcnn_axis_dataflow_float
+	ctest --test-dir $(PROJECT_DIR)/build-p2-float \
+		-R srcnn_axis_dataflow_float --output-on-failure
+	cmake -S $(PROJECT_DIR) -B $(PROJECT_DIR)/build-p2-fixed \
+		-DCMAKE_BUILD_TYPE=Release -DSRCNN_ENABLE_ORACLE_TESTS=OFF \
+		-DSRCNN_BUILD_HLS_FIXED_SIM=ON $(AP_TYPES_CMAKE_ARG)
+	cmake --build $(PROJECT_DIR)/build-p2-fixed --parallel \
+		--target srcnn_axis_dataflow_fixed
+	ctest --test-dir $(PROJECT_DIR)/build-p2-fixed \
+		-R srcnn_axis_dataflow_fixed --output-on-failure
 
 # Example:
 # Natural baseline:
@@ -57,3 +72,12 @@ vitis-axis-dummy-export:
 	SRCNN_HLS_PART="$(SRCNN_HLS_PART)" \
 	SRCNN_HLS_CLOCK_NS="$(SRCNN_HLS_CLOCK_NS)" \
 		$(VITIS_HLS) -f $(PROJECT_DIR)/hls/scripts/run_axis_dummy_hls.tcl
+
+vitis-axis-dataflow-export:
+	@test -n "$(SRCNN_HLS_PART)" || \
+		(echo "SRCNN_HLS_PART is required (use the exact P0a part)"; exit 2)
+	@test -n "$(SRCNN_HLS_CLOCK_NS)" || \
+		(echo "SRCNN_HLS_CLOCK_NS is required (use the confirmed P0a target)"; exit 2)
+	SRCNN_HLS_PART="$(SRCNN_HLS_PART)" \
+	SRCNN_HLS_CLOCK_NS="$(SRCNN_HLS_CLOCK_NS)" \
+		$(VITIS_HLS) -f $(PROJECT_DIR)/hls/scripts/run_axis_dataflow_hls.tcl
