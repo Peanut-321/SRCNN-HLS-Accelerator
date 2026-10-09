@@ -9,6 +9,17 @@
 #include <string>
 #include <vector>
 
+// Keep the normal host regression as the default, while allowing Vitis RTL
+// co-simulation to isolate one call (or one restart pattern) per component.
+// This macro changes only the testbench; it is not referenced by the HLS DUT.
+#ifndef SRCNN_AXIS_DATAFLOW_TEST_CASE
+#define SRCNN_AXIS_DATAFLOW_TEST_CASE 0
+#endif
+
+static_assert(SRCNN_AXIS_DATAFLOW_TEST_CASE >= 0 &&
+                  SRCNN_AXIS_DATAFLOW_TEST_CASE <= 5,
+              "SRCNN_AXIS_DATAFLOW_TEST_CASE must be in [0, 5]");
+
 namespace {
 
 using srcnn_hls::axis_dataflow::axis_stream_t;
@@ -145,9 +156,23 @@ void run_case(const char* name, int height, int width) {
 
 int main() {
     try {
+#if SRCNN_AXIS_DATAFLOW_TEST_CASE == 1
+        run_case("axis_dataflow_1x1", 1, 1);
+#elif SRCNN_AXIS_DATAFLOW_TEST_CASE == 2
+        run_case("axis_dataflow_5x7", 5, 7);
+#elif SRCNN_AXIS_DATAFLOW_TEST_CASE == 3
+        run_case("axis_dataflow_13x17", 13, 17);
+#elif SRCNN_AXIS_DATAFLOW_TEST_CASE == 4
+        run_case("axis_dataflow_1x1_restart_1", 1, 1);
+        run_case("axis_dataflow_1x1_restart_2", 1, 1);
+#elif SRCNN_AXIS_DATAFLOW_TEST_CASE == 5
+        run_case("axis_dataflow_1x1_transition", 1, 1);
+        run_case("axis_dataflow_5x7_transition", 5, 7);
+#else
         run_case("axis_dataflow_1x1", 1, 1);
         run_case("axis_dataflow_5x7", 5, 7);
         run_case("axis_dataflow_13x17", 13, 17);
+#endif
         std::cout << "PASS: AXIS/DATAFLOW final output exactly matches OC4\n";
         return 0;
     } catch (const std::exception& error) {

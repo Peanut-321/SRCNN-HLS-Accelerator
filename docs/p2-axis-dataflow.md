@@ -92,3 +92,37 @@ The Vitis script uses `srcnn_axis_dataflow_cosim_top` for the three small
 regression frames, then opens a separate solution and exports only the fixed
 `srcnn_axis_dataflow_top`. This prevents a nominal co-sim pass that never calls
 the synthesized top and avoids impractical 255x255 RTL simulation time.
+
+## RTL co-simulation isolation modes
+
+The default testbench performs three top-level transactions in one simulator
+run. If RTL co-simulation stops after transaction 1, define
+`SRCNN_AXIS_DATAFLOW_TEST_CASE` in the **testbench compile flags** to isolate
+the failure without changing the DUT:
+
+| Value | Top-level calls | Diagnostic purpose |
+|---:|---|---|
+| 0 | 1x1, 5x7, 13x17 | Full regression (default) |
+| 1 | 1x1 only | Smallest single transaction |
+| 2 | 5x7 only | Tests the previously stalled second size directly |
+| 3 | 13x17 only | Largest small-image transaction |
+| 4 | 1x1, then 1x1 | Tests `ap_start`/`ap_done` restart independently of size |
+| 5 | 1x1, then 5x7 | Tests restart together with a dimension change |
+
+Run modes 1, 2, and 3 as separate RTL co-sim components or solutions first.
+Interpret the results as follows:
+
+- If mode 2 stalls by itself, the 5x7 DATAFLOW execution has a DUT/FIFO issue.
+- If modes 1--3 pass but mode 4 stalls, the generated top or harness does not
+  restart correctly between transactions.
+- If mode 4 passes but mode 5 stalls, the failure is specific to changing the
+  runtime dimensions between invocations.
+- If every isolated mode passes but mode 0 stalls, preserve the logs and treat
+  it as a multi-transaction co-simulation/harness problem; do not call it an
+  arithmetic or Conv2 failure.
+
+For the Tcl flow, set the environment variable of the same name before running
+`run_axis_dataflow_hls.tcl`. In the Vitis Unified GUI, add
+`-DSRCNN_AXIS_DATAFLOW_TEST_CASE=N` to the testbench C++ compile flags. Keep all
+design sources, top function, part, clock, and numeric flags identical across
+the runs.

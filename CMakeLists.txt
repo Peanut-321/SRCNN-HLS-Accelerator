@@ -144,6 +144,22 @@ set_tests_properties(srcnn_axis_dataflow_float PROPERTIES
                      LABELS "p2_5;axis_dataflow;float_bitwise"
                      TIMEOUT 180)
 
+# Host-side compile/run coverage for the testbench modes used to isolate an
+# RTL co-simulation stall. Each executable still calls the real HLS top; only
+# the number and dimensions of top-level transactions differ.
+foreach(_axis_case RANGE 1 5)
+    set(_axis_target "srcnn_axis_dataflow_float_case_${_axis_case}")
+    add_executable(${_axis_target} tests/test_srcnn_axis_dataflow.cpp)
+    target_link_libraries(${_axis_target} PRIVATE srcnn_hls_float)
+    target_compile_definitions(
+        ${_axis_target} PRIVATE
+        SRCNN_AXIS_DATAFLOW_TEST_CASE=${_axis_case})
+    add_test(NAME ${_axis_target} COMMAND ${_axis_target})
+    set_tests_properties(${_axis_target} PROPERTIES
+                         LABELS "p2_5;axis_dataflow;cosim_isolation"
+                         TIMEOUT 180)
+endforeach()
+
 # Mac/Linux fixed-point simulation uses Xilinx's open-source simulation-only
 # AP types at an explicit path or a pinned commit. Vitis synthesis must instead
 # use the vendor ap_fixed.h shipped with the selected Vitis version.

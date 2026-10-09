@@ -293,3 +293,16 @@ finish. Do not enter Vivado or optimize Conv2 yet. The next debugging task is
 to diagnose the XSIM transaction-2 stall using the generated RTL testbench and
 DATAFLOW trace/FIFO profiling, while preserving the verified canonical
 structure.
+
+## Follow-up diagnostic prepared after the re-run
+
+The testbench now supports compile-time isolation modes without changing the
+DUT. Modes 1, 2, and 3 run 1x1, 5x7, and 13x17 as independent single
+transactions. Mode 4 calls 1x1 twice, and mode 5 calls 1x1 followed by 5x7.
+The existing three-transaction regression remains mode 0 and the default.
+
+All six host configurations (default plus modes 1--5) pass on macOS. This does
+not close the RTL gate; it only validates the diagnostic testbench. The next
+Windows action is to run independent RTL co-simulation for modes 1--3, then
+use modes 4 and 5 only if all three single-transaction runs pass. The decision
+table and exact compile definition are recorded in `docs/p2-axis-dataflow.md`.
