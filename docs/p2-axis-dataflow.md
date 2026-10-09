@@ -141,3 +141,16 @@ AXIS depth produced the same symptom, but the tool ignored that option, so the
 experiment did not test the proposed adapter capacity. The retained waveform
 must now distinguish a harness/control stop from an internal producer/consumer
 blockage before any internal FIFO depth is changed.
+
+Full waveform capture subsequently showed that the failed dynamic-wrapper run
+never drove a known top-level start: clock and reset were valid, but harness
+`start`, `ce`, and the model AXI channel stayed unknown. The compute core and
+DATAFLOW region therefore never executed. A diagnostic top named
+`srcnn_axis_dataflow_cosim_13x17_top` fixes the dimensions at compile time and
+removes the `height`/`width` AXI-Lite registers while retaining the deployment
+top's AXIS, model `m_axi`, AXI-Lite control, and `ap_ctrl_hs` structure. Build
+it with testbench definitions
+`SRCNN_AXIS_DATAFLOW_TEST_CASE=3` and
+`SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP=1`. A PASS isolates the defect to the
+dynamic co-simulation wrapper/harness; a failure before `ap_start` points to a
+more general Vitis co-simulation harness problem.

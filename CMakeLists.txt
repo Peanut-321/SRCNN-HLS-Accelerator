@@ -160,6 +160,20 @@ foreach(_axis_case RANGE 1 5)
                          TIMEOUT 180)
 endforeach()
 
+add_executable(srcnn_axis_dataflow_float_fixed_13x17
+               tests/test_srcnn_axis_dataflow.cpp)
+target_link_libraries(srcnn_axis_dataflow_float_fixed_13x17 PRIVATE
+                      srcnn_hls_float)
+target_compile_definitions(
+    srcnn_axis_dataflow_float_fixed_13x17 PRIVATE
+    SRCNN_AXIS_DATAFLOW_TEST_CASE=3
+    SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP=1)
+add_test(NAME srcnn_axis_dataflow_float_fixed_13x17
+         COMMAND srcnn_axis_dataflow_float_fixed_13x17)
+set_tests_properties(srcnn_axis_dataflow_float_fixed_13x17 PROPERTIES
+                     LABELS "p2_5;axis_dataflow;cosim_isolation"
+                     TIMEOUT 180)
+
 # Mac/Linux fixed-point simulation uses Xilinx's open-source simulation-only
 # AP types at an explicit path or a pinned commit. Vitis synthesis must instead
 # use the vendor ap_fixed.h shipped with the selected Vitis version.
@@ -228,6 +242,20 @@ if(SRCNN_BUILD_HLS_FIXED_SIM)
     add_test(NAME srcnn_axis_dataflow_fixed COMMAND srcnn_axis_dataflow_fixed)
     set_tests_properties(srcnn_axis_dataflow_fixed PROPERTIES
                          LABELS "p2_5;axis_dataflow;fixed"
+                         TIMEOUT 240)
+
+    add_executable(srcnn_axis_dataflow_fixed_fixed_13x17
+                   tests/test_srcnn_axis_dataflow.cpp)
+    target_link_libraries(srcnn_axis_dataflow_fixed_fixed_13x17 PRIVATE
+                          srcnn_hls_fixed)
+    target_compile_definitions(
+        srcnn_axis_dataflow_fixed_fixed_13x17 PRIVATE
+        SRCNN_AXIS_DATAFLOW_TEST_CASE=3
+        SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP=1)
+    add_test(NAME srcnn_axis_dataflow_fixed_fixed_13x17
+             COMMAND srcnn_axis_dataflow_fixed_fixed_13x17)
+    set_tests_properties(srcnn_axis_dataflow_fixed_fixed_13x17 PROPERTIES
+                         LABELS "p2_5;axis_dataflow;fixed;cosim_isolation"
                          TIMEOUT 240)
 endif()
 

@@ -16,9 +16,16 @@
 #define SRCNN_AXIS_DATAFLOW_TEST_CASE 0
 #endif
 
+#ifndef SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP
+#define SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP 0
+#endif
+
 static_assert(SRCNN_AXIS_DATAFLOW_TEST_CASE >= 0 &&
                   SRCNN_AXIS_DATAFLOW_TEST_CASE <= 5,
               "SRCNN_AXIS_DATAFLOW_TEST_CASE must be in [0, 5]");
+static_assert(!SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP ||
+                  SRCNN_AXIS_DATAFLOW_TEST_CASE == 3,
+              "fixed 13x17 top requires test case 3");
 
 namespace {
 
@@ -112,8 +119,17 @@ void run_case(const char* name, int height, int width) {
         input_stream.write(word);
     }
 
+#if SRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP
+    if (height != 13 || width != 17) {
+        throw std::runtime_error(std::string(name) +
+                                 ": fixed top requires 13x17");
+    }
+    srcnn_axis_dataflow_cosim_13x17_top(input_stream, output_stream,
+                                        model.data());
+#else
     srcnn_axis_dataflow_cosim_top(input_stream, output_stream, model.data(),
                                   height, width);
+#endif
     if (!input_stream.empty()) {
         throw std::runtime_error(std::string(name) +
                                  ": input stream was not fully consumed");

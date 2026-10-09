@@ -506,3 +506,26 @@ Do not change Conv code, FIFO depth, or HLS pragmas. The next investigation
 must inspect or repair the generated co-simulation control harness / AXI-Lite
 startup path so that `start` and `ce` are driven to known values before the
 DUT is expected to issue `m_axi_model_mem` reads.
+
+## Fixed-size wrapper diagnostic prepared
+
+The deployment top has compile-time-fixed dimensions, whereas the failing
+small-image wrapper exposes `height` and `width` through AXI-Lite. A new
+diagnostic top, `srcnn_axis_dataflow_cosim_13x17_top`, removes those two runtime
+registers and invokes the unchanged core with constants 13 and 17. Its external
+control shape otherwise matches deployment: AXIS input/output, one model
+`m_axi`, AXI-Lite model pointer, and `ap_ctrl_hs` return.
+
+The matching testbench build must define both:
+
+```text
+-DSRCNN_AXIS_DATAFLOW_TEST_CASE=3
+-DSRCNN_AXIS_DATAFLOW_USE_FIXED_13X17_TOP=1
+```
+
+This is a harness-isolation experiment, not a compute optimization. It changes
+no arithmetic, token counts, FIFO depths, padding, or model layout. Synthesize
+and RTL co-simulate this fixed top in a new component. If it passes, the
+dynamic height/width co-simulation wrapper is the blocker and does not describe
+the fixed deployment IP. If its start signals remain unknown, the fault is in
+the more general generated AXI-Lite/m_axi co-simulation harness.

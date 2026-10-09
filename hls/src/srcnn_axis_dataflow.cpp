@@ -612,3 +612,17 @@ extern "C" void srcnn_axis_dataflow_cosim_top(
     srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(
         input, output, model, height, width);
 }
+
+extern "C" void srcnn_axis_dataflow_cosim_13x17_top(
+    srcnn_hls::axis_dataflow::axis_stream_t& input,
+    srcnn_hls::axis_dataflow::axis_stream_t& output,
+    const srcnn_hls::numeric::data_t* model) {
+#pragma HLS INTERFACE mode=axis port=input
+#pragma HLS INTERFACE mode=axis port=output
+#pragma HLS INTERFACE mode=m_axi port=model offset=slave bundle=model_mem depth=8129
+#pragma HLS INTERFACE mode=s_axilite port=model bundle=control
+#pragma HLS INTERFACE mode=s_axilite port=return bundle=control
+
+    srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(input, output, model, 13,
+                                                       17);
+}

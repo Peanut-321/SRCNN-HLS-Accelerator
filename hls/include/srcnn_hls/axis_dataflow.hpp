@@ -107,3 +107,11 @@ extern "C" void srcnn_axis_dataflow_cosim_top(
     srcnn_hls::axis_dataflow::axis_stream_t& input,
     srcnn_hls::axis_dataflow::axis_stream_t& output,
     const srcnn_hls::numeric::data_t* model, int height, int width);
+
+// Fixed-size diagnostic wrapper matching the deployment top's control shape.
+// It isolates Vitis co-simulation harness behavior from dynamic AXI-Lite
+// height/width arguments; it is not the IP exported for the board.
+extern "C" void srcnn_axis_dataflow_cosim_13x17_top(
+    srcnn_hls::axis_dataflow::axis_stream_t& input,
+    srcnn_hls::axis_dataflow::axis_stream_t& output,
+    const srcnn_hls::numeric::data_t* model);
