@@ -459,3 +459,50 @@ completion of `load_runtime_model`, start of `run_streaming_core`, AXIS
 `TVALID/TREADY` on input and output, then each internal FIFO's
 empty/full/read/write signals. Do not change FIFO depths or Conv2 pragmas
 before identifying the blocked producer/consumer relationship.
+
+---
+
+# Full-trace RTL co-simulation diagnosis (case 3)
+
+## Configuration
+
+The existing synthesized RTL was reused; no C synthesis and no source change
+was performed. The component configuration was updated only for co-simulation:
+
+```ini
+cosim.tool=xsim
+cosim.rtl=verilog
+cosim.trace_level=all
+cosim.wave_debug=true
+cosim.enable_dataflow_profiling=true
+cosim.enable_fifo_sizing=true
+```
+
+The testbench remained `-DSRCNN_AXIS_DATAFLOW_TEST_CASE=3`. Vitis accepted
+these settings and elaborated XSIM with `-debug all`.
+
+## Waveform evidence
+
+The fresh all-trace run again remained at `RTL Simulation : 0 / 1 @ 113000 ps`.
+The WDB was opened and inspected from 0 to 1,000 ns.
+
+| Time | Signal/event | Observed state | Conclusion |
+|---|---|---|---|
+| 0--1,000 ns | `AESL_clock` | continuously toggles | clock is operating |
+| approximately 110 ns onward | `rst`, `dut_rst` | deasserted and stable | reset is released |
+| 0--1,000 ns | harness `start`, `ce`, `tb_continue` | all `X` | harness does not drive a valid start/control transaction |
+| 0--1,000 ns | `AESL_start`, `AESL_ready`, `AESL_done` | `X`; `AESL_idle` is `Z` | no usable accepted top-level start state |
+| 0--1,000 ns | `m_axi_model_mem_ARVALID/ARREADY` | both `X` | no address handshake occurs |
+| 0--1,000 ns | `ARADDR`, `ARLEN`, `RVALID`, `RREADY`, `RLAST`, `RRESP` | all unknown | model-memory read channel never initializes |
+
+## Classification
+
+**B. The top does not receive a valid/accepted start from the RTL co-simulation
+harness.** This is upstream of SRCNN arithmetic, model loading, DATAFLOW, AXIS,
+and internal FIFOs. The absent model-memory activity is a consequence of the
+invalid control state, not evidence of a Conv1/Conv2/FIFO deadlock.
+
+Do not change Conv code, FIFO depth, or HLS pragmas. The next investigation
+must inspect or repair the generated co-simulation control harness / AXI-Lite
+startup path so that `start` and `ce` are driven to known values before the
+DUT is expected to issue `m_axi_model_mem` reads.
