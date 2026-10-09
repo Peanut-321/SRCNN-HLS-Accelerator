@@ -510,6 +510,13 @@ LAST 生成逻辑。当前不得宣称 Vitis DATAFLOW 性能或 5 ns closure；�
 Vitis 2026.1 的 csim/csynth/cosim/export，并先读 schedule、memory-port 与 FIFO 报告再改
 结构或 pragma。
 
+首次Windows gate确认数值/AXIS C-sim通过、5 ns可综合和IP可导出，但出现
+`HLS 214-114`非canonical DATAFLOW警告；三层latency被串行相加，`model_mem_rd_proc`
+interval接近756.7M cycles，RTL co-sim仅完成1/3 transaction后停滞。该IP明确禁止进入
+Vivado。随后做最小结构修复：把8,129个参数在DATAFLOW前预载到各层独立数组，计算区
+只保留五个stage调用和四条FIFO，不改算术、FIFO深度或Conv2并行度。Mac完整门禁再次
+通过；等待Windows复测确认警告消失、三层重叠以及三组co-sim全部完成。
+
 #### 目标实现
 
 - 正式资产下重跑 P2.2 后，采用通过 deployment numeric gate 的定点类型；

@@ -165,40 +165,20 @@ void conv1_process_padded_row(
     }
 }
 
-void conv1_stream(data_stream_t& input, data_stream_t& output,
-                  const numeric::data_t* model, int height, int width) {
+void conv1_stream(
+    data_stream_t& input, data_stream_t& output,
+    const numeric::data_t
+        weights[kConv1Lanes][kConv1Groups][config::kConv1KernelHeight]
+               [config::kConv1KernelWidth],
+    const numeric::data_t bias[kConv1Lanes][kConv1Groups], int height,
+    int width) {
 #pragma HLS INLINE off
     numeric::data_t row[config::kMaxInputWidth];
     numeric::data_t line_buffer[kConv1HistoryRows][kConv1PaddedWidth];
     numeric::data_t
         window[config::kConv1KernelHeight][config::kConv1KernelWidth];
-    numeric::data_t
-        weights[kConv1Lanes][kConv1Groups][config::kConv1KernelHeight]
-               [config::kConv1KernelWidth];
-    numeric::data_t bias[kConv1Lanes][kConv1Groups];
 #pragma HLS ARRAY_PARTITION variable=weights complete dim=1
 #pragma HLS ARRAY_PARTITION variable=bias complete dim=1
-
-    for (int group = 0; group < kConv1Groups; ++group) {
-        for (int lane = 0; lane < kConv1Lanes; ++lane) {
-            const int output_channel = group * kConv1Lanes + lane;
-            bias[lane][group] = model[kConv1BiasOffset + output_channel];
-            for (int kernel_row = 0;
-                 kernel_row < config::kConv1KernelHeight; ++kernel_row) {
-                for (int kernel_column = 0;
-                     kernel_column < config::kConv1KernelWidth;
-                     ++kernel_column) {
-                    const int source_index =
-                        (output_channel * config::kConv1KernelHeight +
-                         kernel_row) *
-                            config::kConv1KernelWidth +
-                        kernel_column;
-                    weights[lane][group][kernel_row][kernel_column] =
-                        model[kConv1WeightsOffset + source_index];
-                }
-            }
-        }
-    }
 
     for (int bank = 0; bank < kConv1HistoryRows; ++bank) {
         for (int column = 0; column < kConv1PaddedWidth; ++column) {
@@ -236,25 +216,13 @@ void conv1_stream(data_stream_t& input, data_stream_t& output,
     }
 }
 
-void conv2_stream(data_stream_t& input, data_stream_t& output,
-                  const numeric::data_t* model, int height, int width) {
+void conv2_stream(
+    data_stream_t& input, data_stream_t& output,
+    const numeric::data_t
+        weights[config::kConv2OutChannels][config::kConv2InChannels],
+    const numeric::data_t bias[config::kConv2OutChannels], int height,
+    int width) {
 #pragma HLS INLINE off
-    numeric::data_t
-        weights[config::kConv2OutChannels][config::kConv2InChannels];
-    numeric::data_t bias[config::kConv2OutChannels];
-
-    for (int output_channel = 0;
-         output_channel < config::kConv2OutChannels; ++output_channel) {
-        bias[output_channel] = model[kConv2BiasOffset + output_channel];
-        for (int input_channel = 0;
-             input_channel < config::kConv2InChannels; ++input_channel) {
-            weights[output_channel][input_channel] =
-                model[kConv2WeightsOffset +
-                      output_channel * config::kConv2InChannels +
-                      input_channel];
-        }
-    }
-
     const int pixel_count = height * width;
     for (int pixel = 0; pixel < pixel_count; ++pixel) {
         numeric::conv2_acc_t sums[config::kConv2OutChannels];
@@ -369,8 +337,12 @@ void conv3_process_padded_row(
     }
 }
 
-void conv3_stream(data_stream_t& input, data_stream_t& output,
-                  const numeric::data_t* model, int height, int width) {
+void conv3_stream(
+    data_stream_t& input, data_stream_t& output,
+    const numeric::data_t
+        weights[config::kConv3InChannels][config::kConv3KernelHeight]
+               [config::kConv3KernelWidth],
+    numeric::data_t bias, int height, int width) {
 #pragma HLS INLINE off
     numeric::data_t
         row[config::kConv3InChannels][config::kMaxInputWidth];
@@ -380,29 +352,6 @@ void conv3_stream(data_stream_t& input, data_stream_t& output,
     numeric::data_t
         window[config::kConv3InChannels][config::kConv3KernelHeight]
               [config::kConv3KernelWidth];
-    numeric::data_t
-        weights[config::kConv3InChannels][config::kConv3KernelHeight]
-               [config::kConv3KernelWidth];
-
-    const numeric::data_t bias = model[kConv3BiasOffset];
-    for (int input_channel = 0;
-         input_channel < config::kConv3InChannels; ++input_channel) {
-        for (int kernel_row = 0;
-             kernel_row < config::kConv3KernelHeight; ++kernel_row) {
-            for (int kernel_column = 0;
-                 kernel_column < config::kConv3KernelWidth;
-                 ++kernel_column) {
-                const int source_index =
-                    (input_channel * config::kConv3KernelHeight +
-                     kernel_row) *
-                        config::kConv3KernelWidth +
-                    kernel_column;
-                weights[input_channel][kernel_row][kernel_column] =
-                    model[kConv3WeightsOffset + source_index];
-            }
-        }
-    }
-
     for (int bank = 0; bank < kConv3HistoryRows; ++bank) {
         for (int input_channel = 0;
              input_channel < config::kConv3InChannels; ++input_channel) {
@@ -451,6 +400,128 @@ void conv3_stream(data_stream_t& input, data_stream_t& output,
     }
 }
 
+void load_runtime_model(
+    const numeric::data_t* model,
+    numeric::data_t
+        conv1_weights[kConv1Lanes][kConv1Groups]
+                     [config::kConv1KernelHeight]
+                     [config::kConv1KernelWidth],
+    numeric::data_t conv1_bias[kConv1Lanes][kConv1Groups],
+    numeric::data_t
+        conv2_weights[config::kConv2OutChannels]
+                     [config::kConv2InChannels],
+    numeric::data_t conv2_bias[config::kConv2OutChannels],
+    numeric::data_t
+        conv3_weights[config::kConv3InChannels]
+                     [config::kConv3KernelHeight]
+                     [config::kConv3KernelWidth],
+    numeric::data_t* conv3_bias) {
+#pragma HLS INLINE off
+    for (int output_channel = 0;
+         output_channel < config::kConv1OutChannels; ++output_channel) {
+        const int lane = output_channel % kConv1Lanes;
+        const int group = output_channel / kConv1Lanes;
+        for (int kernel_row = 0;
+             kernel_row < config::kConv1KernelHeight; ++kernel_row) {
+            for (int kernel_column = 0;
+                 kernel_column < config::kConv1KernelWidth;
+                 ++kernel_column) {
+#pragma HLS PIPELINE II=1
+                const int source_index =
+                    (output_channel * config::kConv1KernelHeight +
+                     kernel_row) *
+                        config::kConv1KernelWidth +
+                    kernel_column;
+                conv1_weights[lane][group][kernel_row][kernel_column] =
+                    model[kConv1WeightsOffset + source_index];
+            }
+        }
+    }
+    for (int output_channel = 0;
+         output_channel < config::kConv1OutChannels; ++output_channel) {
+#pragma HLS PIPELINE II=1
+        const int lane = output_channel % kConv1Lanes;
+        const int group = output_channel / kConv1Lanes;
+        conv1_bias[lane][group] =
+            model[kConv1BiasOffset + output_channel];
+    }
+
+    for (int output_channel = 0;
+         output_channel < config::kConv2OutChannels; ++output_channel) {
+        for (int input_channel = 0;
+             input_channel < config::kConv2InChannels; ++input_channel) {
+#pragma HLS PIPELINE II=1
+            conv2_weights[output_channel][input_channel] =
+                model[kConv2WeightsOffset +
+                      output_channel * config::kConv2InChannels +
+                      input_channel];
+        }
+    }
+    for (int output_channel = 0;
+         output_channel < config::kConv2OutChannels; ++output_channel) {
+#pragma HLS PIPELINE II=1
+        conv2_bias[output_channel] =
+            model[kConv2BiasOffset + output_channel];
+    }
+
+    for (int input_channel = 0;
+         input_channel < config::kConv3InChannels; ++input_channel) {
+        for (int kernel_row = 0;
+             kernel_row < config::kConv3KernelHeight; ++kernel_row) {
+            for (int kernel_column = 0;
+                 kernel_column < config::kConv3KernelWidth;
+                 ++kernel_column) {
+#pragma HLS PIPELINE II=1
+                const int source_index =
+                    (input_channel * config::kConv3KernelHeight +
+                     kernel_row) *
+                        config::kConv3KernelWidth +
+                    kernel_column;
+                conv3_weights[input_channel][kernel_row][kernel_column] =
+                    model[kConv3WeightsOffset + source_index];
+            }
+        }
+    }
+    *conv3_bias = model[kConv3BiasOffset];
+}
+
+void run_streaming_core(
+    axis_stream_t& input, axis_stream_t& output,
+    const numeric::data_t
+        conv1_weights[kConv1Lanes][kConv1Groups]
+                     [config::kConv1KernelHeight]
+                     [config::kConv1KernelWidth],
+    const numeric::data_t conv1_bias[kConv1Lanes][kConv1Groups],
+    const numeric::data_t
+        conv2_weights[config::kConv2OutChannels]
+                     [config::kConv2InChannels],
+    const numeric::data_t conv2_bias[config::kConv2OutChannels],
+    const numeric::data_t
+        conv3_weights[config::kConv3InChannels]
+                     [config::kConv3KernelHeight]
+                     [config::kConv3KernelWidth],
+    numeric::data_t conv3_bias, int height, int width) {
+#pragma HLS INLINE off
+    data_stream_t input_pixels("input_pixels");
+    data_stream_t conv1_features("conv1_features");
+    data_stream_t conv2_features("conv2_features");
+    data_stream_t output_pixels("output_pixels");
+#pragma HLS STREAM variable=input_pixels depth=64
+#pragma HLS STREAM variable=conv1_features depth=128
+#pragma HLS STREAM variable=conv2_features depth=64
+#pragma HLS STREAM variable=output_pixels depth=64
+#pragma HLS DATAFLOW
+
+    axis_to_scalar(input, input_pixels, height, width);
+    conv1_stream(input_pixels, conv1_features, conv1_weights, conv1_bias,
+                 height, width);
+    conv2_stream(conv1_features, conv2_features, conv2_weights, conv2_bias,
+                 height, width);
+    conv3_stream(conv2_features, output_pixels, conv3_weights, conv3_bias,
+                 height, width);
+    scalar_to_axis(output_pixels, output, height, width);
+}
+
 }  // namespace
 
 std::uint32_t encode_data_bits(numeric::data_t value) {
@@ -482,30 +553,30 @@ numeric::data_t decode_data_bits(std::uint32_t bits) {
 #endif
 }
 
-bool run_srcnn_axis_dataflow(axis_stream_t& input, axis_stream_t& output,
+void run_srcnn_axis_dataflow(axis_stream_t& input, axis_stream_t& output,
                              const numeric::data_t* model, int height,
                              int width) {
-    if (model == 0 || height <= 0 || width <= 0 ||
-        height > config::kMaxInputHeight || width > config::kMaxInputWidth) {
-        return false;
-    }
+    numeric::data_t
+        conv1_weights[kConv1Lanes][kConv1Groups]
+                     [config::kConv1KernelHeight]
+                     [config::kConv1KernelWidth];
+    numeric::data_t conv1_bias[kConv1Lanes][kConv1Groups];
+    numeric::data_t
+        conv2_weights[config::kConv2OutChannels]
+                     [config::kConv2InChannels];
+    numeric::data_t conv2_bias[config::kConv2OutChannels];
+    numeric::data_t
+        conv3_weights[config::kConv3InChannels]
+                     [config::kConv3KernelHeight]
+                     [config::kConv3KernelWidth];
+    numeric::data_t conv3_bias;
+#pragma HLS ARRAY_PARTITION variable=conv1_weights complete dim=1
+#pragma HLS ARRAY_PARTITION variable=conv1_bias complete dim=1
 
-    data_stream_t input_pixels("input_pixels");
-    data_stream_t conv1_features("conv1_features");
-    data_stream_t conv2_features("conv2_features");
-    data_stream_t output_pixels("output_pixels");
-#pragma HLS STREAM variable=input_pixels depth=64
-#pragma HLS STREAM variable=conv1_features depth=128
-#pragma HLS STREAM variable=conv2_features depth=64
-#pragma HLS STREAM variable=output_pixels depth=64
-#pragma HLS DATAFLOW
-
-    axis_to_scalar(input, input_pixels, height, width);
-    conv1_stream(input_pixels, conv1_features, model, height, width);
-    conv2_stream(conv1_features, conv2_features, model, height, width);
-    conv3_stream(conv2_features, output_pixels, model, height, width);
-    scalar_to_axis(output_pixels, output, height, width);
-    return true;
+    load_runtime_model(model, conv1_weights, conv1_bias, conv2_weights,
+                       conv2_bias, conv3_weights, &conv3_bias);
+    run_streaming_core(input, output, conv1_weights, conv1_bias, conv2_weights,
+                       conv2_bias, conv3_weights, conv3_bias, height, width);
 }
 
 }  // namespace axis_dataflow
@@ -521,7 +592,7 @@ extern "C" void srcnn_axis_dataflow_top(
 #pragma HLS INTERFACE mode=s_axilite port=model bundle=control
 #pragma HLS INTERFACE mode=s_axilite port=return bundle=control
 
-    (void)srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(
+    srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(
         input, output, model, srcnn_hls::config::kDeploymentInputHeight,
         srcnn_hls::config::kDeploymentInputWidth);
 }
@@ -538,6 +609,6 @@ extern "C" void srcnn_axis_dataflow_cosim_top(
 #pragma HLS INTERFACE mode=s_axilite port=width bundle=control
 #pragma HLS INTERFACE mode=s_axilite port=return bundle=control
 
-    (void)srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(
+    srcnn_hls::axis_dataflow::run_srcnn_axis_dataflow(
         input, output, model, height, width);
 }

@@ -38,7 +38,9 @@ address of a contiguous model buffer in PS-accessible DDR.
 
 The public repository does not contain the official course model. To avoid
 hard-coding random test parameters, this checkpoint loads one contiguous model
-buffer on every invocation. Its elements retain the frozen OIHW/O order:
+buffer on every invocation. All 8,129 elements are copied into layer-owned
+local arrays before the DATAFLOW region starts; no stage reads `model_mem`
+during pixel processing. Its elements retain the frozen OIHW/O order:
 
 | Offset | Count | Payload |
 |---:|---:|---|

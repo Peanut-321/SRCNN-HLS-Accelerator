@@ -86,7 +86,7 @@ numeric::data_t decode_data_bits(std::uint32_t bits);
 
 // Dynamic dimensions exist only to keep the Mac/Vitis C-sim regression small.
 // The synthesizable deployment top below fixes both dimensions to 255.
-bool run_srcnn_axis_dataflow(axis_stream_t& input, axis_stream_t& output,
+void run_srcnn_axis_dataflow(axis_stream_t& input, axis_stream_t& output,
                              const numeric::data_t* model, int height,
                              int width);
 
