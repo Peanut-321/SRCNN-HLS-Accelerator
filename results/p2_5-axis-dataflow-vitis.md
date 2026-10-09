@@ -394,3 +394,68 @@ Repeat mode 3 first under the same part, 5 ns clock, and fixed-point flags. A
 PASS attributes the prior stop to an underspecified verification adapter. A
 repeat failure rejects that hypothesis and requires waveform inspection of
 the four internal DATAFLOW channel handshakes before any FIFO depth is changed.
+
+---
+
+# AXIS depth re-validation (commit `46af475`)
+
+## Fresh mode-3 build
+
+The repository was fast-forwarded to `46af475 Size AXIS cosim adapters for full
+frames`. The Windows test used a new component directory rather than the
+previous mode-3 component, so its RTL was freshly generated from the updated
+source:
+
+```text
+Component: srcnn_axis_dataflow_cosim_case3_depth_5ns
+Top:       srcnn_axis_dataflow_cosim_top
+Part:      xck26-sfvc784-2LV-c
+Clock:     5 ns
+Design:    -std=c++14 -DSRCNN_HLS_FIXED_POINT=1
+Testbench: -DSRCNN_AXIS_DATAFLOW_TEST_CASE=3
+```
+
+C synthesis completed successfully in 1 minute 25 seconds and reported an
+estimated Fmax of 273.97 MHz. During synthesis, however, Vitis emitted the
+following warnings for the two newly added top-level AXIS pragmas:
+
+```text
+WARNING: [HLS 214-387] Ignore depth setting for top argument 'input'
+WARNING: [HLS 214-387] Ignore depth setting for top argument 'output'
+```
+
+Thus Vitis HLS 2026.1 did not apply the requested `depth=65025` as an HLS
+interface-depth setting for this top-level stream interface.
+
+## Result
+
+The newly generated co-simulation C testbench passed the 13x17 functional
+comparison and reported a maximum C-model stream depth of 14,144. XSIM then
+started a single RTL transaction and remained at:
+
+```text
+RTL Simulation : 0 / 1 [n/a] @ "113000"
+```
+
+for more than two minutes of additional XSIM CPU time, with no simulation-time
+or transaction progress. The XSIM process was stopped manually. Therefore the
+AXIS-depth hypothesis is **not resolved by this Windows/Vitis 2026.1 test**;
+the pragma was explicitly ignored and the prior mode-3 symptom remains.
+
+The fresh waveform is retained at:
+
+```text
+C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_case3_depth_5ns\hls\sim\verilog\srcnn_axis_dataflow_cosim_top.wdb
+```
+
+No mode-0 three-frame run was performed because the prerequisite single 13x17
+RTL transaction still does not complete. No DUT, convolution code, padding,
+internal FIFO depth, or numeric type was changed in this Windows validation.
+
+## Next diagnostic
+
+Inspect the retained waveform in this order: `ap_start/ap_ready/ap_done`,
+completion of `load_runtime_model`, start of `run_streaming_core`, AXIS
+`TVALID/TREADY` on input and output, then each internal FIFO's
+empty/full/read/write signals. Do not change FIFO depths or Conv2 pragmas
+before identifying the blocked producer/consumer relationship.
