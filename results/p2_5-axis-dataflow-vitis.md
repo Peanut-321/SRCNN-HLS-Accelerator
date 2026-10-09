@@ -757,3 +757,96 @@ TB yet. The next evidence must compare the actual AXI-Lite startup waveforms
 for the passing dynamic 5x7 and failing dynamic 13x17 auto-generated harnesses,
 then identify whether the 13x17 vector depth changes the generated AXI source,
 AXIS source, or model-memory setup.
+
+---
+
+# Generated harness and port-trace comparison (current dynamic top)
+
+This comparison used the same current dynamic top and port-trace components:
+
+```text
+PASS: C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_case2_current_porttrace_5ns
+FAIL: C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_case3_dynamic_porttrace_5ns
+Top:  srcnn_axis_dataflow_cosim_top
+Part: xck26-sfvc784-2LV-c
+Clock: 5 ns
+```
+
+No source, DUT, convolution, DATAFLOW, FIFO, or pragma change was made for
+this analysis.
+
+## Port-trace evidence
+
+The passing WDB contains samples for the real generated DUT ports. Its control
+sequence is:
+
+| Time | Signal/event | Observation | Conclusion |
+|---:|---|---|---|
+| 112.5--112.6 ns | reset | `ap_rst_n` deasserts | DUT leaves reset |
+| 117.5 ns | AXI-Lite AW | handshake at `0x10` | model pointer low-address write starts |
+| 122.5 ns | AXI-Lite W | `0x00000000` | model pointer low value |
+| 132.5 / 137.5 ns | AXI-Lite AW / W | address `0x14`, data `0x00000000` | model pointer high value |
+| 147.5 / 152.5 ns | AXI-Lite AW / W | address `0x1c`, data `5` | height write |
+| 162.5 / 167.5 ns | AXI-Lite AW / W | address `0x24`, data `7` | width write |
+| 182.5 / 187.5 ns | AXI-Lite AW / W | address `0x00`, data `1` | `ap_start` write |
+| 117.5 ns | input AXIS | `TVALID && TREADY` observed | input source is active |
+
+No output handshake is expected before 200 ns. A direct `m_axi_model_mem` AR
+handshake was not observed in the sampled 0--200 ns window; this does not
+establish absence of model reads later in the run.
+
+The failing WDB contains the same real port objects, but their sampled values
+are blank (except reset metadata). Its expected RTL-output vector files are
+empty and locked while its `xsimk.exe` process is still active. Therefore this
+WDB is incomplete/unflushed and cannot supply valid evidence for an AXI-Lite,
+m_axi, or AXIS protocol classification. In particular, it is not valid to
+classify the run as A, B, C, or D from the blank wave values.
+
+## Generated-file comparison
+
+The generated UVM sequence/driver and wrapper sources that drive AXI-Lite,
+m_axi model reads, and AXIS were byte-identical between the two components.
+The common generated port trace Tcl was also byte-identical and explicitly
+logs the DUT ports. The complete `model_mem` input vector is byte-identical:
+
+```text
+32,532 bytes
+SHA-256: 02F083FD8EA69AAAB3DAC2064C25DD969FF594C45B232270B8F786D2617FAED0
+```
+
+The transaction metadata is well-formed in both cases. The only intentional
+vector-size difference is frame size: 35 input/output AXIS words for 5x7 and
+221 words for 13x17. The 13x17 file has one transaction, 221 inputs, 221
+expected outputs, and model depth 8,129 with valid header and termination
+markers.
+
+The first material non-vector divergence occurs before XSIM executes:
+
+| Generated artifact | PASS (5x7) | FAIL (13x17) |
+|---|---|---|
+| `run_sim.tcl` | DATAFLOW deadlock/FIFO sizing stages then XSIM | direct XSIM run |
+| `fifo_monitor.v` | present and instantiated | absent |
+| `fifo_sizing*.json/.tcl` | present | absent |
+| `dataflow_monitor_API.tcl`, FIFO/process monitor files | present | absent |
+| `*.autotb.v` | AXIS depth 35, FIFO monitor included | AXIS depth 221, no FIFO monitor |
+
+This is a co-simulation execution-configuration difference, not a generated
+DUT RTL, UVM-driver, model-vector, or startup-sequence difference. The two
+components were therefore not fully controlled despite sharing the dynamic
+top and `trace_level=port`: the passing component enabled DATAFLOW profiling
+and FIFO sizing, while the failing component disabled both.
+
+## Conclusion and next gate
+
+The valid conclusion is **E0: incomplete comparison caused by an unfinished
+failing XSIM run plus a material auto-harness configuration difference**. It
+is not evidence of an SRCNN/DATAFLOW deadlock, and it does not establish
+classification A--D.
+
+Do not create another image-size experiment and do not alter the DUT. First
+end the stale XSIM processes that still lock the failed run, then rerun the
+existing dynamic 13x17 component with the same DATAFLOW profiling and FIFO
+sizing settings as the passing dynamic 5x7 component. This is a co-simulation
+configuration-only rerun; no C synthesis or design change is needed. If that
+matched rerun still fails with a complete WDB, stop investigating the Vitis
+automatic harness and build the independent SystemVerilog RTL testbench.
