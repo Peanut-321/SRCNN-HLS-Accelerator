@@ -850,3 +850,48 @@ sizing settings as the passing dynamic 5x7 component. This is a co-simulation
 configuration-only rerun; no C synthesis or design change is needed. If that
 matched rerun still fails with a complete WDB, stop investigating the Vitis
 automatic harness and build the independent SystemVerilog RTL testbench.
+
+## Matched-configuration dynamic 13x17 re-run
+
+The remaining harness configuration variable was tested on the existing
+`srcnn_axis_dataflow_cosim_case3_dynamic_porttrace_5ns` component. No source,
+RTL, C synthesis, DUT, FIFO, pragma, or vector was changed. Before relaunch,
+stale XSIM processes from earlier abandoned runs were ended so they could not
+hold the WDB or RTL-vector files open.
+
+The component was changed only from:
+
+```ini
+cosim.enable_dataflow_profiling=0
+cosim.enable_fifo_sizing=0
+```
+
+to the settings used by the passing dynamic 5x7 component:
+
+```ini
+cosim.enable_dataflow_profiling=1
+cosim.enable_fifo_sizing=1
+```
+
+The co-simulation was launched with `vitis-run --mode hls --cosim`, preserving
+XSim, Verilog, port trace, and the existing 13x17 test-case flag. Vitis
+re-instrumented the test bench and generated the co-simulation files, then
+XSIM started normally. It remained at:
+
+```text
+RTL Simulation : 0 / 1 [n/a] @ 113000
+```
+
+for about 94 CPU seconds with no transaction progress, and was then stopped.
+The same stagnation therefore occurs with the passing component's DATAFLOW
+profiling and FIFO-sizing flow enabled.
+
+**Updated conclusion:** profiling/FIFO-sizing configuration is not the cause.
+The dynamic 13x17 automatic co-sim failure remains reproducible after the only
+material generated-harness configuration difference was eliminated. The
+validated automatic comparison has now reached its useful limit: the next
+verification stage is an independent SystemVerilog RTL testbench for
+`srcnn_axis_dataflow_cosim_top`, using the existing 13x17 model/input/expected
+vectors and explicit AXI-Lite, m_axi-read, and AXIS agents. Do not add further
+Vitis auto-co-sim size/configuration experiments and do not modify the SRCNN
+implementation.
