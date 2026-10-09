@@ -30,11 +30,12 @@ host must send exactly 65,025 input words with all four bytes valid and `TLAST`
 on the final word. The hardware datapath consumes a fixed frame length and does
 not branch on the incoming sidebands.
 
-Both top-level AXIS pragmas declare `depth=65025`. In Vitis this value sizes
-the verification adapter used for RTL co-simulation; it is the maximum number
-of samples supplied or retained by the testbench adapter. It does **not** add a
-65,025-word frame FIFO to the exported AXI4-Stream hardware interface. The
-internal DATAFLOW FIFO depths remain the separate values listed below.
+An experiment added `depth=65025` to both top-level AXIS pragmas to try to size
+the RTL co-simulation adapter. Vitis HLS 2026.1 emitted `HLS 214-387` and
+explicitly ignored both settings for these top-level `hls::stream` arguments.
+The ineffective options were therefore removed. They neither changed the
+generated interface nor tested the adapter-capacity hypothesis. Internal
+DATAFLOW FIFO depths remain the separate values listed below.
 
 The top uses `ap_ctrl_hs` through AXI4-Lite. It has one additional `m_axi`
 master named `model_mem`; the AXI4-Lite `model` register holds the physical
@@ -134,8 +135,9 @@ design sources, top function, part, clock, and numeric flags identical across
 the runs.
 
 The first isolation run found 1x1 and 5x7 passing while 13x17 stalled before
-completing its only transaction. Because the token counts are balanced across
-the acyclic pipeline (`221 -> 14,144 -> 7,072 -> 221`), the next minimal
-diagnostic is to synthesize the explicit top-level AXIS adapter depth above and
-repeat mode 3. Only if that run still stalls should waveform/FIFO handshakes be
-used to attribute an internal producer/consumer blockage.
+completing its only transaction. Token counts are balanced across the acyclic
+pipeline (`221 -> 14,144 -> 7,072 -> 221`). Repeating mode 3 with the attempted
+AXIS depth produced the same symptom, but the tool ignored that option, so the
+experiment did not test the proposed adapter capacity. The retained waveform
+must now distinguish a harness/control stop from an internal producer/consumer
+blockage before any internal FIFO depth is changed.

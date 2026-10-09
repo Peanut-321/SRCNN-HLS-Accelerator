@@ -586,10 +586,8 @@ extern "C" void srcnn_axis_dataflow_top(
     srcnn_hls::axis_dataflow::axis_stream_t& input,
     srcnn_hls::axis_dataflow::axis_stream_t& output,
     const srcnn_hls::numeric::data_t* model) {
-// AXIS depth sizes the Vitis RTL co-simulation verification adapter. It does
-// not instantiate a full-frame FIFO in the synthesized deployment datapath.
-#pragma HLS INTERFACE mode=axis port=input depth=65025
-#pragma HLS INTERFACE mode=axis port=output depth=65025
+#pragma HLS INTERFACE mode=axis port=input
+#pragma HLS INTERFACE mode=axis port=output
 #pragma HLS INTERFACE mode=m_axi port=model offset=slave bundle=model_mem depth=8129
 #pragma HLS INTERFACE mode=s_axilite port=model bundle=control
 #pragma HLS INTERFACE mode=s_axilite port=return bundle=control
@@ -603,10 +601,8 @@ extern "C" void srcnn_axis_dataflow_cosim_top(
     srcnn_hls::axis_dataflow::axis_stream_t& input,
     srcnn_hls::axis_dataflow::axis_stream_t& output,
     const srcnn_hls::numeric::data_t* model, int height, int width) {
-// Use the deployment maximum so every legal small-frame regression fits in
-// the RTL co-simulation verification adapter.
-#pragma HLS INTERFACE mode=axis port=input depth=65025
-#pragma HLS INTERFACE mode=axis port=output depth=65025
+#pragma HLS INTERFACE mode=axis port=input
+#pragma HLS INTERFACE mode=axis port=output
 #pragma HLS INTERFACE mode=m_axi port=model offset=slave bundle=model_mem depth=8129
 #pragma HLS INTERFACE mode=s_axilite port=model bundle=control
 #pragma HLS INTERFACE mode=s_axilite port=height bundle=control
