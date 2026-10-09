@@ -575,3 +575,113 @@ wrapper is not the fault source. Together with the all-trace dynamic-wrapper
 run, this points to a broader Vitis 2026.1 AXI-Lite/m_axi co-simulation harness
 startup problem. Conv code, DATAFLOW, internal FIFOs, and pragmas remain
 unmodified and are not implicated by this result.
+
+---
+
+# Generated co-simulation harness comparison (commit `7fc62cb`)
+
+## Scope
+
+This comparison is read-only. It compares the already-generated components:
+
+```text
+PASS: C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_case2_5ns
+FAIL: C:\fpga\vitis-workspace\srcnn_axis_dataflow_cosim_13x17_5ns
+```
+
+The passing component synthesizes `srcnn_axis_dataflow_cosim_top` with the
+5x7 test case. The failing component synthesizes the distinct fixed-size top
+`srcnn_axis_dataflow_cosim_13x17_top` with the 13x17 test case. They therefore
+are not the same generated RTL top: the fixed top deliberately has no runtime
+`height` or `width` AXI-Lite arguments.
+
+## Generated-file inventory
+
+Text/vector/harness files (excluding XSIM compiled objects and WDB databases):
+
+| Set | Count |
+|---|---:|
+| 5x7 component | 217 |
+| fixed 13x17 component | 206 |
+
+After normalizing the two top names to `<TOP>`, 15 files exist only in the 5x7
+component and four only in the fixed component. The important interface-specific
+entries are:
+
+| File/category | 5x7 | Fixed 13x17 | Meaning |
+|---|---:|---:|---|
+| `autotvin_height.dat` | present | absent | runtime height removed |
+| `autotvin_width.dat` | present | absent | runtime width removed |
+| `control_AWADDR` | 6 bits | 5 bits | address map contracts after removing the two registers |
+| flow-control loop RTL | absent | present | generated schedule differs for the fixed top |
+
+Representative checksums are below. The two `model_mem` images are byte-for-byte
+identical, which rules out a different model payload as the initial cause.
+
+| Generated file | 5x7 bytes / SHA-256 | Fixed 13x17 bytes / SHA-256 |
+|---|---|---|
+| `*.autotb.v` | 21066 / `B7FBD4F6A87AC5D8280A0E8DB1C94AEEAE693F6063D09FFD3FE56D37790D50D2` | 20699 / `AC82783134E8157CB78AC17BD3719E410BBD902F7BBA5D1E85F025F666ABC8E4` |
+| `autowrap/systemc/apatb_*.cpp` | 41738 / `D357365B7C37C45DA8C2FC568F17B16F0BDBEE341411C6C86833E9C9AF0436F3` | 40732 / `6984E3BDA4AA7DCD933D4ABE6BCD88145869E6D14617FABD476424AD77E85021` |
+| `tv/cdatafile/ref.tcl` | 373 / `05A6EC7C65E40FCE5C6F5434A33FB14AF1A33F3938433644F9BE56FB6881F365` | 354 / `DB7ABF391312438E02C47E2BF576B53E49B1A090012AC49A6E56177761C47D20` |
+| input data vector | 498 / `C7AAB938AC34CFF59BD0AAF99F58C9138ADA9EDC35436AB13700ABCAAAF68DBB` | 2730 / `747ACE5AFA3EAB1744310F91BB3A197ED8F051EB44438BC822D701C069C46C54` |
+| `autotvin_model_mem.dat` | 32532 / `02F083FD8EA69AAAB3DAC2064C25DD969FF594C45B232270B8F786D2617FAED0` | 32532 / `02F083FD8EA69AAAB3DAC2064C25DD969FF594C45B232270B8F786D2617FAED0` |
+
+## Transaction-vector validation
+
+All AXIS vectors have exactly one `[[transaction]]` / `[[/transaction]]` pair
+and one enclosing runtime marker. The headers and end markers are valid.
+
+| Item | 5x7 | Fixed 13x17 |
+|---|---:|---:|
+| input AXIS payload words | 35 | 221 |
+| expected output AXIS payload words | 35 | 221 |
+| `model_mem` depth in `ref.tcl` | 8129 | 8129 |
+| transactions | 1 | 1 |
+| `height` / `width` vectors | one each | correctly absent |
+
+The 13x17 vectors therefore describe the expected single frame; no missing
+header, truncated payload, or missing end marker was found.
+
+## Start-driver analysis
+
+The generated `*.autotb.v` files declare legacy root-level `start`, `ce`, and
+`tb_continue` registers, but neither generated file assigns to any of them.
+They are not the DUT start mechanism. `X` on those three signals in a WDB is
+expected and cannot diagnose a failed launch.
+
+Both harnesses use the same actual chain:
+
+```text
+SV UVM AXI-Lite master
+  -> s_axi_control AW/W transactions
+  -> svtb_top.misc_if.tb2dut_ap_start
+  -> AESL_start in *.autotb.v
+  -> DUT ap_start
+```
+
+In both generated sequence libraries the AXI-Lite sequence first writes the
+`model` pointer at offset 16, waits for completion, then writes bit 0 at address
+0 to start the DUT. The 5x7 sequence additionally writes `height` at offset 28
+and `width` at offset 36. The fixed 13x17 sequence omits only those two writes.
+The common start write is present in each harness.
+
+This corrects the earlier classification that treated `start/ce/tb_continue = X`
+as evidence that the top had not been started. The prior waveform checked
+legacy un-driven signals, not `tb2dut_ap_start` or the AXI-Lite channel.
+
+## Outcome
+
+No generated transaction-vector or start-sequence defect uniquely explains the
+13x17 run. The first concrete generated difference is the intentional interface
+change caused by fixed dimensions (no `height/width` vectors and 5-bit rather
+than 6-bit AXI-Lite address), and it leaves the model-pointer write at address
+16 and start write at address 0 valid.
+
+The next diagnostic must observe the actual UVM AXI-Lite signals
+`control_AWVALID/AWREADY`, `control_WVALID/WREADY`, and the resulting
+`tb2dut_ap_start`, rather than the unused root-level `start/ce/tb_continue`.
+Before declaring a Vitis harness defect or building a replacement SystemVerilog
+TB, reproduce a fresh dynamic 5x7 component from the same current commit and
+co-simulation trace settings as the fixed 13x17 component. That controls for
+source revision and trace configuration while retaining an input size known to
+be small.
