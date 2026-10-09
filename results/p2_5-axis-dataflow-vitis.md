@@ -1039,3 +1039,197 @@ testbench as the reproducible replacement for the blocked automatic harness.
 The next separate gate is to verify the final fixed 255x255 deployment top's
 5 ns synthesis, DATAFLOW/interface reports and IP export. No Vivado Block
 Design, implementation, PYNQ or board work was started in this step.
+
+## Current fixed 255x255 deployment synthesis and IP export (2026-10-10)
+
+**Result: deployment C Synthesis and IP Catalog export PASS.** This is a new
+component using the canonical DATAFLOW source, after the independent dynamic
+and fixed 13x17 RTL tests passed. No DUT, arithmetic, convolution, FIFO,
+padding, model layout, or pragma changed in this step.
+
+### Provenance and reproduction
+
+- Source commit: `fef80439290af7d418bf05b57a9b6fc95c485e15`.
+- Vitis HLS 2026.1, HLS build 6493734; v++/vitis-run build 6497934.
+- Packaging tool: Vivado 2026.1, build 6511674.
+- Component: `C:\fpga\vitis-workspace\srcnn_axis_dataflow_deployment_current_255x255_5ns`.
+- Top: `srcnn_axis_dataflow_top`, fixed `1 x 255 x 255`.
+- Part: `xck26-sfvc784-2LV-c`; target clock: `5.0 ns`.
+- Design flags: `-std=c++14 -DSRCNN_HLS_FIXED_POINT=1`, plus the repository's
+  `hls/include` path. Three design files: `srcnn_axis_dataflow.cpp`,
+  `srcnn_hls.cpp`, `srcnn_hls_line_buffer.cpp`.
+- `source-manifest.json` records the source commit and SHA-256 of all design
+  sources and HLS headers. These hashes were checked again after export.
+- The first CLI configuration quoted the include path, which this Vitis
+  per-file flag parser treated literally. The configuration was corrected
+  before successful compilation; no source fix or stale synthesized RTL was
+  used. The successful `synthesis-cli.log` contains the corrected flags.
+
+The new deployment-only runner avoids restarting the blocked automatic
+co-simulation harness and refuses to overwrite an existing synthesis component:
+
+```powershell
+& .\hls\scripts\run_axis_dataflow_deployment.ps1 `
+  -Component C:\fpga\vitis-workspace\srcnn_axis_dataflow_deployment_repeat_255x255_5ns
+```
+
+It runs `v++ --compile --mode hls` then `vitis-run --mode hls --package`.
+`package.output.syn=false`: packaging does not run Vivado implementation.
+Package-only mode checks the configuration and source hashes against the
+synthesis manifest before reusing RTL.
+
+### Functional verification carried forward
+
+The unchanged design source has the preceding C-simulation/OC4 golden checks
+and independent dynamic/fixed 13x17 RTL PASS evidence recorded above. The
+independent fixed test observed 221 correct outputs, 8129 unique model reads,
+correct TKEEP/TSTRB/TLAST, backpressure, and real RTL ap_done. Its measured
+start-to-done latency was 478066 cycles. The intentional corrupt-golden test
+failed as required. This step did not rerun automatic co-simulation or perform
+a complete 255x255 RTL simulation; small-frame functional evidence and
+deployment synthesis estimates must be kept distinct.
+
+### Deployment timing, latency and resources
+
+| Metric | Current result |
+|---|---:|
+| Target clock | 5.000 ns |
+| Tool default clock uncertainty | 1.350 ns (27%) |
+| Effective scheduling budget | 3.650 ns |
+| Estimated top clock period | 3.650 ns |
+| Estimated Fmax reported by HLS | 273.97 MHz |
+| Top slack against effective budget | +0.000 ns; no reported timing violation |
+| Top latency, min / max | 509109788 / 512719257 cycles |
+| Top interval, min / max | 509109789 / 512719258 cycles |
+| Top latency at target clock, min / max | 2.545548940 / 2.563596285 s |
+| BRAM_18K | 247 / 288 (85.8%) |
+| DSP | 86 / 1248 |
+| LUT | 24371 / 117120 in XML; 24375 in summary RPT |
+| FF | 9287 / 234240 |
+| URAM | 0 / 64 |
+
+The four-LUT XML/RPT discrepancy is preserved rather than silently selecting
+one value. These are HLS estimates, not post-route resources or timing. Zero
+top slack means the estimated effective budget is just met; it does not
+establish routed timing margin.
+
+### DATAFLOW stages and scheduling
+
+`run_streaming_core` is reported as a DATAFLOW module with exactly the five
+intended stages. `load_runtime_model` is a separate predecessor outside this
+region and takes 8201 estimated cycles. The streaming-core generated RTL has
+no `model_mem` interface; convolution stages consume separate layer arrays.
+`HLS 214-114` is absent. No model-memory read process is part of the streaming
+region. The generated RTL implements concurrent stage/FIFO connections; this
+step has no new 255x255 runtime occupancy/overlap profiling measurement.
+
+| Module | Latency min / max (cycles) | Interval min / max (cycles) | Estimated period (ns) | Slack against 3.650 ns (ns) |
+|---|---:|---:|---:|---:|
+| load_runtime_model | 8201 / 8201 | 8201 / 8201 | 3.650 | +0.000 |
+| run_streaming_core | 509101582 / 512711051 | 15540977 / 512711052 | 3.607 | +0.043 |
+| axis_to_scalar | 65027 / 65027 | 65026 / 65026 | 1.707 | +1.943 |
+| conv1_stream | 1431783 / 512711051 | 1431783 / 512711051 | 3.475 | +0.175 |
+| conv2_stream | 15540976 / 15540976 | 15540976 / 15540976 | 3.590 | +0.060 |
+| conv3_stream | 4645654 / 170178228 | 4645654 / 170178228 | 3.607 | +0.043 |
+| scalar_to_axis | 65027 / 65027 | 65026 / 65026 | 2.133 | +1.517 |
+
+These ranges are the module XML values. Top XML and the aggregated summary
+show different lower-bound formulations for hierarchical DATAFLOW; no bound
+is treated as an observed frame latency. In particular, the Conv1 report
+charges up to five padded-row repetitions for every source row, whereas the
+source uses five only on the first row and one thereafter. Conv3 has a similar
+first-row conditional (three versus one). Conditional MAC execution and
+blocking streams further limit the usefulness of static latency bounds.
+
+| FIFO | Width | Synthesized depth |
+|---|---:|---:|
+| input_pixels_U | 32 bits | 64 |
+| conv1_features_U | 32 bits | 128 |
+| conv2_features_U | 32 bits | 64 |
+| output_pixels_U | 32 bits | 64 |
+
+All four data FIFOs use generated `fifo_w32_d*_A` RAM modules. Four stage-start
+FIFOs use shift registers. No full Conv1/Conv2 intermediate feature map is
+stored.
+
+Conv1 output-channel grouping is 16 groups of four lanes. Its 81-iteration MAC
+loop has II=1, iteration latency 5, loop latency 84, enclosing pipeline latency
+86 cycles; four 32x32 multiplication operators account for 16 DSPs in that
+pipeline. Conv2's input-channel loop has trip count 64, II=2, loop latency 130,
+and enclosing pipeline latency 132. HLS automatically unrolled its 32-channel
+inner work and allocated 64 DSPs; no new UNROLL was added.
+
+Conv2 weights map to `RAM_1WNR_AUTO_1R1W`, with **15 physical RAM copies**
+(`ram0` through `ram14` in generated RTL), to provide read ports. Its schedule
+report shows `RAM_1WnR`, 32-bit width, depth 2048, 17 ports and weight loads
+split across ST_1 and ST_2. This is direct evidence of the memory access
+schedule, but does not alone prove a unique cause for II=2. No memory-port or
+loop-carried-dependency warning was emitted. The remaining accumulation and
+resource constraints have not been individually isolated.
+
+Conv1 is the largest reported stage bound and the strongest current throughput
+bottleneck candidate: its MAC work alone is 16 x 81 = 1296 iterations per
+output pixel, compared with Conv2's 239 scheduled cycles per pixel. Conv2 is
+not shown to be the primary bottleneck. Exact full-frame throughput requires
+runtime evidence; do not derive board FPS from the conservative report bounds
+or start Conv2 optimization on this evidence alone. BRAM headroom is also
+limited, with Conv3 accounting for 149 BRAM_18K and layer-weight storage outside
+the streaming core accounting for much of the remaining usage.
+
+### Interfaces and IP identity
+
+| Interface | Verified exported properties |
+|---|---|
+| input_r | AXI4-Stream input; TDATA=32, TKEEP=4, TSTRB=4, TLAST=1, TVALID/TREADY; both registered |
+| output_r | AXI4-Stream output; same widths and registration |
+| m_axi_model_mem | Read-only usage; data=32 bits, address=64 bits, slave offset; max read burst=16, read outstanding=16 |
+| s_axi_control | AXI4-Lite data=32 bits, address=5 bits; ap_ctrl_hs |
+| ap_clk / ap_rst_n | Clock / synchronous active-low reset |
+
+Control registers: CTRL `0x00` (start/done/idle/ready/auto_restart/interrupt),
+GIER `0x04`, IP_IER `0x08`, IP_ISR `0x0c`, model pointer low `0x10`, high `0x14`.
+There are no height/width control registers on the fixed deployment top.
+
+Exported `component.xml` identifies
+`xilinx.com:hls:srcnn_axis_dataflow_top:1.0` with the two AXIS interfaces,
+`m_axi_model_mem`, and `s_axi_control`. No diagnostic/cosim top was exported.
+
+IP directory:
+`C:\fpga\vitis-workspace\srcnn_axis_dataflow_deployment_current_255x255_5ns\hls\impl\ip`.
+
+IP archive (498603 bytes):
+`C:\fpga\vitis-workspace\srcnn_axis_dataflow_deployment_current_255x255_5ns\hls\impl\ip\xilinx_com_hls_srcnn_axis_dataflow_top_1_0.zip`.
+
+Archive SHA-256:
+`2E832D8E2BCEBC681C36155D29A8488D58E26B3FFC99194B273DDC1009928FC8`.
+
+### Warnings and evidence saved
+
+The complete successful synthesis log contains 103 warning lines:
+
+- 13 `HLS 207-1655`: C++17 constexpr-if extensions inside AMD's
+  `ap_axi_sdata.h` while using the requested C++14 flags.
+- 2 `XFORM 203-561`: inferred lower trip-count bounds updated to the constant
+  padded widths 263 (Conv1) and 259 (Conv3).
+- 27 `SYN 201-103`: anonymous-namespace function names legalized for RTL.
+- 61 `RTGEN 206-101`: 60 unused AR submodule outputs tied to zero during burst
+  generation; one synchronous active-low AXI reset notice. The parent loader
+  still has inferred bursts and the top has a real model-memory interface.
+
+There are **no emitted memory-port, dependency, timing-violation, or canonical
+DATAFLOW warnings**. Informational `HLS 200-2167` records the 15-copy Conv2
+weight RAM. The burst report records five `214-353` widening failures because
+max-widen bitwidth is zero; model_mem remains intentionally 32 bits. The final
+single Conv3 bias read is not a burst. Packaging has no warning/error lines.
+
+All synthesis report RPT/XML files, successful CLI logs, configuration,
+source manifest, IP metadata/archive, Conv2 scheduling/binding reports and
+selected generated RTL evidence are copied outside Git to:
+
+`C:\Users\xzype\Documents\Codex\2026-10-08\windows-codex-mac-github-windows-codex\outputs\deployment-255x255`.
+
+Only this result Markdown update and the deployment PowerShell runner are
+submitted to Git. Generated components, IP archives, WDBs and unrelated local
+Vivado logs remain outside the commit. The synthesis/export gate is complete;
+Vivado system integration and routed timing remain separate next work. No
+Block Design, PYNQ, board test or convolution optimization was started.
