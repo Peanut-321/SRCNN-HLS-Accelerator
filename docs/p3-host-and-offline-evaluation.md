@@ -1,6 +1,8 @@
 # P3 host preparation and offline image evaluation
 
-Status: software prepared; official assets and physical KV260 execution pending.
+Status: software prepared; supplied official assets evaluated offline;
+physical KV260 execution pending. See `results/p3-official-assets-evaluation.md`.
+The supplied archive contains Butterfly from Set5 and thirteen Set14 cases.
 Hardware checkpoint: `571149b`, source `fef8043`, fixed 255x255, 200 MHz.
 No HLS/DUT/pragma/numeric changes are part of this work.
 
@@ -63,6 +65,29 @@ Border-crop/postprocessing policy still requires the actual course convention.
 baby, bird, butterfly, head, woman. It rejects missing cases and inconsistent
 crop/peak. Its mean PSNR is the mean of per-image dB values, not PSNR computed
 from mean MSE. This is offline inference, not a measured FPGA score.
+
+For the supplied starter inventory, run:
+
+```text
+python tools/evaluate_course_assets.py --root PATH_TO_EXTRACTED_GOLDEN --out NEW_RESULT_DIRECTORY --source-commit 6b9bba6dd4af86a8636960f53714937867cb4f79
+```
+
+This verifies ten recorded files, checks Butterfly's official final/Conv1
+outputs, saves raw expectations and per-case hashes, and reports normalized
+peak=1/no-crop/no-clamp metrics. The starter `util.cpp` instead uses uint8
+conversion in its PSNR helper; this is a different metric. Floating-to-u8
+conversion outside its representable range is not a portable postprocessing
+policy. The report records out-of-range counts rather than silently clamping.
+
+`tools/srcnn_axis_raw_host.cpp` reads normalized float32 input/model binaries,
+calls the existing HLS deployment top for 255x255, checks word counts and
+TKEEP/TSTRB/TLAST, and writes uint32 output codes. Compile with C++14/O2,
+`-ffp-contract=off`, `-DSRCNN_HLS_FIXED_POINT=1`,
+`-DSRCNN_AXIS_DATAFLOW_HOST_SIM=1`, `-Ihls/include`, and
+`-Ithird_party/HLS_arbitrary_Precision_Types/include`, linking
+`hls/src/srcnn_axis_dataflow.cpp`. Smaller frames call the diagnostic top.
+Usage: `srcnn_axis_raw_host input_float.bin model_float.bin output_raw.bin H W`.
+This is host ap_fixed validation, not new RTL or board simulation.
 
 ## Board runner and notebook
 
