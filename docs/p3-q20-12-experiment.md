@@ -97,13 +97,52 @@ It validates input/model ranges, calls the real fixed deployment top, checks
 stream counts and TKEEP/TSTRB/TLAST, and emits the active widths. Compare its
 65,025 words with the V2 `expected.npy`, without using the Q24.8 decoder.
 
+## Vitis and independent RTL reproduction
+
+The Windows checkpoint is recorded in
+[p3-q20-12-vitis.md](../results/p3-q20-12-vitis.md). Vitis C simulation,
+two independent fixed 13x17 RTL cases and deployment synthesis/export
+completed. Conv1 MAC II regressed from 1 to 2; Q20.12 is not promoted as
+the deployment/performance baseline.
+
+From the repository root in PowerShell, use new output directories:
+
+```powershell
+$q20Root = 'C:\fpga\q20-12-validation'
+& .\hls\scripts\run_axis_q20_12_hls.ps1 -WorkRoot $q20Root
+python .\tools\prepare_q20_12_rtl_vectors.py --out "$q20Root\vectors-fixture"
+python .\tools\prepare_q20_12_rtl_vectors.py --input .\data\butterfly_float\input_float.npy --model .\data\butterfly_float\model_float.npy --out "$q20Root\vectors-official"
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\small_13x17_5ns" -Vectors "$q20Root\vectors-fixture" -WorkDir "$q20Root\rtl-fixture"
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\small_13x17_5ns" -Vectors "$q20Root\vectors-official" -WorkDir "$q20Root\rtl-official"
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\small_13x17_5ns" -Vectors "$q20Root\vectors-fixture" -WorkDir "$q20Root\rtl-negative" -RejectCorruptGolden
+```
+
+These helpers default to AMD tools under `C:\AMDDesignTools\2026.1`;
+override `-VitisRoot` / `-VivadoRoot` if needed. Python requires NumPy.
+The HLS helper creates both components, runs small C simulation, synthesizes
+both tops, and records source hashes. `-Stage prepare` only writes configs.
+The RTL helper reuses the existing independent SV scoreboard, validates
+source/vector hashes and profile before running XSim, and records RTL
+hashes. It does not run the Vitis automatic UVM co-sim harness.
+
+The official case is a 13x17 input crop with a freshly computed replicate
+Golden for that small frame. It is not a full-frame RTL test. The negative
+run must reject a corrupted first expected word. Source changes after
+component preparation require a new component. Existing output directories
+are rejected rather than overwritten.
+
+Only the IP under `deployment_255x255_5ns` has the fixed deployment top.
+Ignore the diagnostic IP automatically generated for `small_13x17_5ns`.
+Keep all build outputs, RTL/WDB and export ZIP files outside Git.
+
 ## Next gate
 
 The host checkpoint is in
 [p3-q20-12-host-checkpoint.md](../results/p3-q20-12-host-checkpoint.md).
-Before promoting this format, create separate Vitis components with the
-profile switch on both design and testbench, then perform C simulation,
-synthesis, independent RTL verification and resource/timing comparison.
-Any subsequent deployment export must still use `srcnn_axis_dataflow_top`.
-Existing Q24.8 components/RTL/overlays must remain separate. No Q20.12
-resource, timing, RTL or board result is established by these host tests.
+The Vitis checkpoint establishes resource estimates and small-frame RTL
+correctness, but reveals a Conv1 accumulator carried dependence that prevents
+II=1. Inspect that feedback schedule before attempting a minimal structural
+fix, retaining the numeric contract and bitwise verification. Any deployment
+export must use `srcnn_axis_dataflow_top`. Existing Q24.8 components/RTL/
+overlays remain separate. Full-frame/restart RTL tests, routed implementation
+and board validation have not been completed for Q20.12.
