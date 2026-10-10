@@ -102,8 +102,11 @@ stream counts and TKEEP/TSTRB/TLAST, and emits the active widths. Compare its
 The Windows checkpoint is recorded in
 [p3-q20-12-vitis.md](../results/p3-q20-12-vitis.md). Vitis C simulation,
 two independent fixed 13x17 RTL cases and deployment synthesis/export
-completed. Conv1 MAC II regressed from 1 to 2; Q20.12 is not promoted as
-the deployment/performance baseline.
+completed. The initial Conv1 MAC II regression from 1 to 2 is resolved by
+[direct accumulator writeback](../results/p3-q20-12-conv1-writeback.md):
+fresh synthesis restores II=1, independent RTL outputs remain identical,
+and the full-frame host output is unchanged. Q20.12 remains opt-in; the
+existing Q24.8 overlay and deployment default are not replaced.
 
 From the repository root in PowerShell, use new output directories:
 
@@ -139,10 +142,10 @@ Keep all build outputs, RTL/WDB and export ZIP files outside Git.
 
 The host checkpoint is in
 [p3-q20-12-host-checkpoint.md](../results/p3-q20-12-host-checkpoint.md).
-The Vitis checkpoint establishes resource estimates and small-frame RTL
-correctness, but reveals a Conv1 accumulator carried dependence that prevents
-II=1. Inspect that feedback schedule before attempting a minimal structural
-fix, retaining the numeric contract and bitwise verification. Any deployment
-export must use `srcnn_axis_dataflow_top`. Existing Q24.8 components/RTL/
-overlays remain separate. Full-frame/restart RTL tests, routed implementation
-and board validation have not been completed for Q20.12.
+The direct-writeback checkpoint establishes II=1, resource estimates and
+small-frame RTL correctness without changing the numeric contract. Next
+extend RTL coverage to full-frame and restart behavior before integration.
+Any deployment export must use `srcnn_axis_dataflow_top`. Existing Q24.8
+components/RTL/overlays remain separate. Routed implementation and board
+validation have not been completed for Q20.12; estimated top slack remains
+zero. Use short work paths to avoid Windows RTL-generator path limits.
