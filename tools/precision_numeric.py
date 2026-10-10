@@ -1,26 +1,27 @@
 """Offline-only signed fixed-point experiments; frozen deployment is unchanged.
 
-Products retain 2*F fractional bits, accumulators use the existing <=1 declared
-bounds, assignments saturate, and layer outputs round to nearest/even. int64
-execution is allowed only when every accumulator fits signed int64.
+Products retain 2*F fractional bits. Default accumulator sizing uses the
+legacy <=1 bounds; optional explicit widths support the official host profile.
+Assignments saturate and layer outputs round to nearest/even. int64 execution
+is allowed only when every accumulator fits signed int64.
 """
 from dataclasses import dataclass
 import math
 import numpy as np
 from deployment_numeric import MODEL_PARTS, MODEL_WORDS
 
-# Proposed upward-rounded bounds for the supplied official model; not the
-# current HLS configuration. Order: Conv1 W/B, Conv2 W/B, Conv3 W/B.
+# Upward-rounded official-model bounds, shared with the opt-in Q20.12 HLS
+# configuration. Default HLS still uses legacy bounds. Order: C1 W/B, C2 W/B, C3 W/B.
 OFFICIAL_DECLARED_BOUNDS = ((600,1000),(383,1000),(852,1000),
                             (85,1000),(163,1000),(29,1000))
 
 
 def official_declared_sizing(fmt):
-    """Mirror numeric_config.hpp with proposed conservative rational bounds.
+    """Mirror the opt-in numeric_config.hpp conservative rational bounds.
 
     This alternative contract proves a whole class of models safe, not only
     observed pixels. The bound on each quantized parameter is rounded upward.
-    It never changes the existing header or relaxes its static_assert.
+    Calling this helper does not select the HLS profile or relax static_asserts.
     """
     raw_bounds = [(n*fmt.scale+d-1)//d for n,d in OFFICIAL_DECLARED_BOUNDS]
     incoming, layers = fmt.scale, []
@@ -34,7 +35,7 @@ def official_declared_sizing(fmt):
                        "preactivation_abs_bound":bound/fmt.scale**2,
                        "worst_case_data_saturation":output_bound>fmt.high})
         incoming=min(output_bound,fmt.high)
-    return {"status":"PROPOSED_CONTRACT_NOT_APPLIED_TO_HLS",
+    return {"status":"OFFLINE_DECLARED_SIZING_NOT_HARDWARE_VALIDATION",
             "input_abs_max":1,"model_abs_max_rationals":list(OFFICIAL_DECLARED_BOUNDS),
             "raw_model_abs_max_bounds":raw_bounds,"layers":layers,
             "declared_range_static_assert_passes":not any(x["worst_case_data_saturation"] for x in layers)}
@@ -85,12 +86,16 @@ class FixedFormat:
         return quotient + ((twice > self.scale) | ((twice == self.scale) & (quotient % 2 != 0)))
 
 
-def infer_fixed(image, model, fmt):
+def infer_fixed(image, model, fmt, accumulator_bits=None):
     """OIHW bias-first MAC order, replicate edges, Conv1/2 ReLU.
 
     Collect pre-ReLU accumulator and pre/post-narrowing ranges and saturation
-    counts. The study's varying formats never enter deployment bundle helpers.
+    counts. Generic study formats remain separate from deployment helpers;
+    the official Q20.12 preparer supplies its derived accumulator widths.
     """
+    widths = fmt.accumulator_widths() if accumulator_bits is None else list(accumulator_bits)
+    if (len(widths) != 3 or any(not isinstance(w, int) or w < 2*fmt.fraction_bits+1 or w > 63 for w in widths)):
+        raise ValueError("require three accumulator widths with full product precision, <=63 bits")
     current, model = np.asarray(image), np.asarray(model)
     if current.ndim == 2: current = current[None]
     if (current.ndim != 3 or current.shape[0] != 1 or min(current.shape[1:]) < 1
@@ -101,7 +106,7 @@ def infer_fixed(image, model, fmt):
         raise ValueError("raw value outside selected format")
     current, model = current.astype(np.int64), model.astype(np.int64).reshape(-1)
     layers, diagnostics = [], []
-    for index, width in enumerate(fmt.accumulator_widths()):
+    for index, width in enumerate(widths):
         _, offset, shape = MODEL_PARTS[index * 2]
         _, bias_offset, bias_shape = MODEL_PARTS[index * 2 + 1]
         weights = model[offset:offset + math.prod(shape)].reshape(shape)

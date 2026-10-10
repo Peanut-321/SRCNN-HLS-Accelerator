@@ -66,7 +66,11 @@ void run_case(const char* name, int height, int width) {
         static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
 
     const auto input =
+#if SRCNN_HLS_OFFICIAL_Q20_12
+        deterministic_values<data_t>(pixel_count, 9, 0, 16);
+#else
         deterministic_values<data_t>(pixel_count, 9, -4, 16);
+#endif
     const auto conv1_weights = deterministic_values<data_t>(
         srcnn_hls::axis_dataflow::kConv1WeightsCount, 7, -3, 32);
     const auto conv1_bias = deterministic_values<data_t>(
@@ -78,7 +82,11 @@ void run_case(const char* name, int height, int width) {
     const auto conv3_weights = deterministic_values<data_t>(
         srcnn_hls::axis_dataflow::kConv3WeightsCount, 7, -3, 64);
     const auto conv3_bias = deterministic_values<data_t>(
+#if SRCNN_HLS_OFFICIAL_Q20_12
+        srcnn_hls::axis_dataflow::kConv3BiasCount, 3, -1, 64);
+#else
         srcnn_hls::axis_dataflow::kConv3BiasCount, 3, -1, 32);
+#endif
 
     std::vector<data_t> model;
     model.reserve(srcnn_hls::axis_dataflow::kModelElementCount);

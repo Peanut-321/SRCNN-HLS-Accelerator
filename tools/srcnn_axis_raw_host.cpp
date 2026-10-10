@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <cmath>
 using namespace srcnn_hls::axis_dataflow;
 using srcnn_hls::numeric::data_t;
 std::vector<float> read_floats(const char* name, int count) {
@@ -12,6 +13,28 @@ std::vector<float> read_floats(const char* name, int count) {
     if (!file || file.peek() != EOF) throw std::runtime_error("invalid float file length");
     return values;
 }
+void validate_official_profile(const std::vector<float>& pixels,
+                               const std::vector<float>& parameters) {
+    if (!srcnn_hls::config::kOfficialQ20_12) return;
+    for (float value : pixels) {
+        if (!std::isfinite(value) || value < 0 || value > 1)
+            throw std::runtime_error("official Q20.12 input outside normalized [0,1]");
+    }
+    const int offsets[] = {0,5184,5248,7296,7328,8128,8129};
+    const char* names[] = {"conv1_weights","conv1_bias","conv2_weights",
+                           "conv2_bias","conv3_weights","conv3_bias"};
+    const srcnn_hls::config::PositiveRational bounds[] = {
+        srcnn_hls::config::kConv1WeightAbsMax, srcnn_hls::config::kConv1BiasAbsMax,
+        srcnn_hls::config::kConv2WeightAbsMax, srcnn_hls::config::kConv2BiasAbsMax,
+        srcnn_hls::config::kConv3WeightAbsMax, srcnn_hls::config::kConv3BiasAbsMax};
+    for (int part=0;part<6;++part) {
+        const double limit=static_cast<double>(bounds[part].numerator)/bounds[part].denominator;
+        for (int i=offsets[part];i<offsets[part+1];++i) {
+            if (!std::isfinite(parameters[i]) || std::abs(static_cast<double>(parameters[i])) > limit)
+                throw std::runtime_error(std::string("official Q20.12 model range: ")+names[part]);
+        }
+    }
+}
 int main(int argc, char** argv) {
     try {
         if (argc != 6) throw std::runtime_error("input_f32 model_f32 output_raw height width");
@@ -20,6 +43,7 @@ int main(int argc, char** argv) {
             throw std::runtime_error("dimensions must be in [1,255]");
         const auto pixels = read_floats(argv[1], height * width);
         const auto parameters = read_floats(argv[2], 8129);
+        validate_official_profile(pixels,parameters);
         std::vector<data_t> model(8129);
         for (int i=0; i<8129; ++i) model[i] = parameters[i];
         axis_stream_t input, output;
@@ -41,6 +65,12 @@ int main(int argc, char** argv) {
             file.write(reinterpret_cast<const char*>(&bits), sizeof(bits));
         }
         if (!file) throw std::runtime_error("output write");
-        std::cout << "PASS current HLS host top " << height << "x" << width << " words=" << height*width << "\n";
+        std::cout << "PASS HLS host top " << height << "x" << width << " words=" << height*width
+                  << " W=" << srcnn_hls::config::kDataTotalBits
+                  << " I=" << srcnn_hls::config::kDataIntegerBits
+                  << " F=" << srcnn_hls::numeric::kDataFractionBits
+                  << " acc=" << srcnn_hls::numeric::Conv1Sizing::kSelectedTotalBits
+                  << "/" << srcnn_hls::numeric::Conv2Sizing::kSelectedTotalBits
+                  << "/" << srcnn_hls::numeric::Conv3Sizing::kSelectedTotalBits << "\n";
     } catch (const std::exception& error) { std::cerr << error.what() << "\n"; return 1; }
 }

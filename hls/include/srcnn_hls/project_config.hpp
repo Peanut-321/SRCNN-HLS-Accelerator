@@ -2,6 +2,15 @@
 
 #include <cstdint>
 
+// Opt-in official-model numerical experiment. Default builds retain the wide
+// Q24.8 contract used by the committed random/all-ones regression vectors.
+#ifndef SRCNN_HLS_OFFICIAL_Q20_12
+#define SRCNN_HLS_OFFICIAL_Q20_12 0
+#endif
+#if SRCNN_HLS_OFFICIAL_Q20_12 != 0 && SRCNN_HLS_OFFICIAL_Q20_12 != 1
+#error "SRCNN_HLS_OFFICIAL_Q20_12 must be 0 or 1"
+#endif
+
 namespace srcnn_hls {
 namespace config {
 
@@ -94,12 +103,29 @@ struct PositiveRational {
     std::uint64_t denominator;
 };
 
+constexpr bool kOfficialQ20_12 = SRCNN_HLS_OFFICIAL_Q20_12 != 0;
+constexpr int kDataTotalBits = 32;
+
+#if SRCNN_HLS_OFFICIAL_Q20_12
+// Official normalized-input experiment. Bounds are upward-rounded rationals
+// covering the supplied model; they are NOT valid for arbitrary/all-ones
+// weights. Host preparation must check every input and model parameter.
+// Accumulator widths continue to be derived in numeric_config.hpp; no
+// accumulator override or worst-case saturation opt-out is used.
+constexpr int kDataIntegerBits = 20;
+constexpr PositiveRational kInputAbsMax = {1, 1};
+constexpr PositiveRational kConv1WeightAbsMax = {600, 1000};
+constexpr PositiveRational kConv2WeightAbsMax = {852, 1000};
+constexpr PositiveRational kConv3WeightAbsMax = {163, 1000};
+constexpr PositiveRational kConv1BiasAbsMax = {383, 1000};
+constexpr PositiveRational kConv2BiasAbsMax = {85, 1000};
+constexpr PositiveRational kConv3BiasAbsMax = {29, 1000};
+#else
 // Dependency: official model/input dynamic ranges. The wide Q24.8 placeholder
 // is selected only so the all-ones 13x13 valid sanity path and all five random
 // regression sets can be represented. P2.2a verifies the mechanism, not the
 // deployment quality/resource choice; P2.2b must revisit it with official
 // weights and course images.
-constexpr int kDataTotalBits = 32;
 constexpr int kDataIntegerBits = 24;
 
 // Dependency: input normalization contract. Placeholder is |X| <= 1.
@@ -116,6 +142,7 @@ constexpr PositiveRational kConv3WeightAbsMax = {1, 1};
 constexpr PositiveRational kConv1BiasAbsMax = {1, 1};
 constexpr PositiveRational kConv2BiasAbsMax = {1, 1};
 constexpr PositiveRational kConv3BiasAbsMax = {1, 1};
+#endif
 
 // A tightened accumulator is an explicit OPT-D action. The enabled bit is
 // separate from the value: zero is a legal ap_fixed integer-width value and is

@@ -179,6 +179,11 @@ set_tests_properties(srcnn_axis_dataflow_float_fixed_13x17 PROPERTIES
 # use the vendor ap_fixed.h shipped with the selected Vitis version.
 option(SRCNN_BUILD_HLS_FIXED_SIM
        "Build the P2.1 host ap_fixed instantiation/smoke test" OFF)
+option(SRCNN_BUILD_HLS_OFFICIAL_Q20_12_HOST
+       "Build separate official Q20.12 host targets without changing legacy fixed targets" OFF)
+if(SRCNN_BUILD_HLS_OFFICIAL_Q20_12_HOST AND NOT SRCNN_BUILD_HLS_FIXED_SIM)
+    message(FATAL_ERROR "Q20.12 host targets require SRCNN_BUILD_HLS_FIXED_SIM=ON")
+endif()
 set(SRCNN_AP_TYPES_INCLUDE_DIR "" CACHE PATH
     "Directory containing the open-source ap_fixed.h for host simulation")
 if(SRCNN_BUILD_HLS_FIXED_SIM)
@@ -257,6 +262,25 @@ if(SRCNN_BUILD_HLS_FIXED_SIM)
     set_tests_properties(srcnn_axis_dataflow_fixed_fixed_13x17 PROPERTIES
                          LABELS "p2_5;axis_dataflow;fixed;cosim_isolation"
                          TIMEOUT 240)
+
+    if(SRCNN_BUILD_HLS_OFFICIAL_Q20_12_HOST)
+        add_srcnn_hls_library(srcnn_hls_official_q20_12 1)
+        target_compile_definitions(srcnn_hls_official_q20_12 PUBLIC SRCNN_HLS_OFFICIAL_Q20_12=1)
+        target_include_directories(srcnn_hls_official_q20_12 SYSTEM PUBLIC "${_srcnn_ap_include}")
+        add_executable(srcnn_hls_official_q20_12_contract tests/test_hls_official_q20_12.cpp)
+        target_link_libraries(srcnn_hls_official_q20_12_contract PRIVATE srcnn_hls_official_q20_12)
+        add_test(NAME srcnn_hls_official_q20_12_contract COMMAND srcnn_hls_official_q20_12_contract)
+        add_executable(srcnn_axis_dataflow_official_q20_12 tests/test_srcnn_axis_dataflow.cpp)
+        target_link_libraries(srcnn_axis_dataflow_official_q20_12 PRIVATE srcnn_hls_official_q20_12)
+        add_test(NAME srcnn_axis_dataflow_official_q20_12 COMMAND srcnn_axis_dataflow_official_q20_12)
+        set_tests_properties(srcnn_hls_official_q20_12_contract srcnn_axis_dataflow_official_q20_12
+                             PROPERTIES LABELS "p3;official_q20_12;host_only" TIMEOUT 240)
+        add_executable(srcnn_axis_q20_12_raw_host tools/srcnn_axis_raw_host.cpp)
+        target_link_libraries(srcnn_axis_q20_12_raw_host PRIVATE srcnn_hls_official_q20_12)
+        set_target_properties(srcnn_hls_official_q20_12_contract srcnn_axis_dataflow_official_q20_12
+                              srcnn_axis_q20_12_raw_host
+                              PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    endif()
 endif()
 
 # Independent cross-validation oracle (pure-Python, stdlib only).

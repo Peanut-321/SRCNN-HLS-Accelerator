@@ -28,6 +28,9 @@
 namespace srcnn_hls {
 namespace numeric {
 
+static_assert(!config::kOfficialQ20_12 || SRCNN_HLS_FIXED_POINT == 1,
+              "official Q20.12 profile requires SRCNN_HLS_FIXED_POINT=1");
+
 constexpr int kDataFractionBits =
     config::kDataTotalBits - config::kDataIntegerBits;
 constexpr int kAccumulatorFractionBits = 2 * kDataFractionBits;
