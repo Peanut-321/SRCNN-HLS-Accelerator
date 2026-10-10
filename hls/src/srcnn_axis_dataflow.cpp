@@ -147,10 +147,19 @@ void conv1_process_padded_row(
                         window[kernel_row][kernel_column];
                     for (int lane = 0; lane < kConv1Lanes; ++lane) {
 #pragma HLS UNROLL
+#if SRCNN_HLS_OFFICIAL_Q20_12
+                        // Direct writeback avoids the reference helper's extra
+                        // feedback state; the conv1_acc_t assignment keeps AP_SAT.
+                        sums[lane] =
+                            sums[lane] +
+                            weights[lane][group][kernel_row][kernel_column] *
+                                window_value;
+#else
                         arithmetic::accumulate_product(
                             sums[lane],
                             weights[lane][group][kernel_row][kernel_column],
                             window_value);
+#endif
                     }
                 }
             }
