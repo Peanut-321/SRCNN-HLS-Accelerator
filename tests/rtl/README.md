@@ -40,7 +40,7 @@ PASS requires:
 `start_to_rtl_done` counts from the first sampled DUT `ap_start`/non-idle
 condition to the first sampled DUT `ap_done`. `polled_done_cycle` is the later
 software-style AXI-Lite status readback and must not be reported as DUT latency.
-One transaction is exercised per run. This small-frame functional simulation
+The original runner exercises one transaction per run. This small-frame functional simulation
 does not verify routed timing, the 255x255 deployment top, or board behavior.
 
 To prove the scoreboard rejects wrong output, repeat the dynamic command in a
@@ -50,3 +50,28 @@ that failure. Ordinary runs never change the expected output.
 
 Only the verification sources and results Markdown belong in Git. Keep
 converted vectors, copied RTL, WDBs, manifests and logs outside the repository.
+
+## Q20.12 fixed deployment and restart coverage
+
+`run_axis_q20_12_rtl.ps1` also supports the fixed 255x255 deployment top with
+`-Deployment`. Add `-FrameCount 2` for two transactions without a DUT reset;
+prepare matching vectors with `prepare_q20_12_rtl_vectors.py --restart`.
+The second frame complements normalized input (`4096 - input_raw`) and changes
+the final model bias by one legal raw unit. Its Golden is independently
+recomputed with the 31/37/44-bit integer reference. This tests model reload
+as well as image/state restart. Full-frame vectors require a validated Q20.12
+V2 bundle supplied through `--bundle PATH --deployment`.
+
+The runner validates source/profile/vector hashes before using existing RTL.
+Every frame must complete AXI-Lite start/done, read all 8,129 model addresses,
+match all 221 or 65,025 outputs, emit correct sidebands, and preserve output
+under backpressure. No model/input/output transfer is allowed outside an
+active frame. The timeout is six million cycles per small frame and 550
+million cycles per full frame. Full runs print progress every two million
+cycles and can take substantially longer than small-frame simulations.
+
+`-RejectSecondFrameGolden -FrameCount 2` must first complete frame one and
+then reject output zero of frame two. It is a negative scoreboard check, not
+a successful DUT run. Defaults retain the original single 13x17 transaction.
+These RTL simulations validate functional behavior, not routed timing or
+board performance.

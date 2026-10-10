@@ -138,13 +138,39 @@ Only the IP under `deployment_255x255_5ns` has the fixed deployment top.
 Ignore the diagnostic IP automatically generated for `small_13x17_5ns`.
 Keep all build outputs, RTL/WDB and export ZIP files outside Git.
 
+## Full-frame and consecutive-start RTL reproduction
+
+[The full-frame checkpoint](../results/p3-q20-12-full-frame-rtl.md) passes
+two complete fixed 255x255 transactions without resetting the DUT. The
+second transaction changes every input pixel and one legal model bias.
+All 130,050 outputs match independent integer Golden; the existing RTL
+is reused without another synthesis or DUT change.
+
+Prepare the V2 bundle above first, then use new work directories:
+
+```powershell
+python .\tools\prepare_q20_12_rtl_vectors.py --input .\data\butterfly_float\input_float.npy --model .\data\butterfly_float\model_float.npy --restart --out "$q20Root\vectors-restart-small"
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\small_13x17_5ns" -Vectors "$q20Root\vectors-restart-small" -WorkDir "$q20Root\rtl-restart-small" -FrameCount 2
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\small_13x17_5ns" -Vectors "$q20Root\vectors-restart-small" -WorkDir "$q20Root\rtl-restart-negative" -FrameCount 2 -RejectSecondFrameGolden
+python .\tools\prepare_q20_12_rtl_vectors.py --bundle .\data\butterfly_q20_12 --deployment --restart --out "$q20Root\vectors-restart-full"
+& .\hls\scripts\run_axis_q20_12_rtl.ps1 -Component "$q20Root\deployment_255x255_5ns" -Vectors "$q20Root\vectors-restart-full" -WorkDir "$q20Root\rtl-restart-full" -Deployment -FrameCount 2
+```
+
+The full run took approximately 83 minutes on this Windows machine and
+prints progress every two million cycles. Each frame must read all 8,129
+model words, match every output and complete real DUT `ap_done`; the
+negative run must finish frame one before rejecting frame two's output 0.
+The runner saves port WDBs and source/RTL/vector manifests. These tests use
+the independent SV harness, not Vitis autotb/UVM.
+
 ## Next gate
 
 The host checkpoint is in
 [p3-q20-12-host-checkpoint.md](../results/p3-q20-12-host-checkpoint.md).
 The direct-writeback checkpoint establishes II=1, resource estimates and
-small-frame RTL correctness without changing the numeric contract. Next
-extend RTL coverage to full-frame and restart behavior before integration.
+small-frame RTL correctness without changing the numeric contract. Full-frame
+and no-reset restart coverage now pass as recorded above. Next verify the
+candidate's integration and routed timing, then its matching Q20.12 runner.
 Any deployment export must use `srcnn_axis_dataflow_top`. Existing Q24.8
 components/RTL/overlays remain separate. Routed implementation and board
 validation have not been completed for Q20.12; estimated top slack remains

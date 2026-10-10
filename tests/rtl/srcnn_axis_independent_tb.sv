@@ -1,6 +1,9 @@
 `timescale 1ns/1ps
 // Independent AXI agents. No Vitis UVM/autotb code or forced DUT signals.
-`ifdef FIXED_13X17
+`ifdef DEPLOYMENT_255X255
+`define SRCNN_DUT srcnn_axis_dataflow_top
+`define CONTROL_ADDR_BITS 5
+`elsif FIXED_13X17
 `define SRCNN_DUT srcnn_axis_dataflow_cosim_13x17_top
 `define CONTROL_ADDR_BITS 5
 `else
@@ -8,7 +11,17 @@
 `define CONTROL_ADDR_BITS 6
 `endif
 module srcnn_axis_independent_tb;
-  localparam integer PIXELS=221, MODEL_WORDS=8129, TIMEOUT_CYCLES=6000000;
+`ifdef DEPLOYMENT_255X255
+  localparam integer PIXELS=65025, TIMEOUT_CYCLES=550000000, PROGRESS_CYCLES=2000000;
+`else
+  localparam integer PIXELS=221, TIMEOUT_CYCLES=6000000, PROGRESS_CYCLES=500000;
+`endif
+`ifdef TWO_FRAMES
+  localparam integer FRAMES=2;
+`else
+  localparam integer FRAMES=1;
+`endif
+  localparam integer MODEL_WORDS=8129;
   localparam [63:0] MODEL_BASE=64'h10000000;
   reg ap_clk=0;
   always #2.5 ap_clk=~ap_clk;
@@ -17,6 +30,8 @@ module srcnn_axis_independent_tb;
   reg model_seen[0:MODEL_WORDS-1];
   integer cycle=0, input_count=0, output_count=0, model_reads=0, unique_model_reads=0, ar_count=0;
   integer start_cycle=-1, done_cycle=-1, rtl_done_cycle=-1, output_stall_cycles=0;
+  integer frame=0, frame_begin_cycle=0, total_inputs=0, total_outputs=0, total_model_reads=0;
+  integer total_unique_reads=0, total_bursts=0, total_stalls=0;
   reg started=0, completed=0;
   reg [`CONTROL_ADDR_BITS-1:0] awaddr=0, araddr=0;
   reg awvalid=0, wvalid=0, arvalid=0;
@@ -73,6 +88,7 @@ module srcnn_axis_independent_tb;
       if(mem_awvalid!==0 || mem_wvalid!==0) $fatal(1,"Unexpected model write/unknown write control");
       if($isunknown({mem_arvalid,mem_rready})) $fatal(1,"Unknown model read control cycle=%0d",cycle);
       if(mem_arvalid && mem_arready) begin
+        if(!started) $fatal(1,"Model read outside active frame");
         if($isunknown({mem_araddr,mem_arlen,mem_arsize,mem_arburst,mem_arid}) ||
            mem_arsize!=2 || mem_arburst!=1 || mem_araddr[1:0]!=0 || mem_araddr<MODEL_BASE ||
            ((mem_araddr-MODEL_BASE)/4+mem_arlen)>=MODEL_WORDS)
@@ -95,7 +111,7 @@ module srcnn_axis_independent_tb;
   reg [40:0] held_output;
   always @(posedge ap_clk) begin
     cycle=cycle+1;
-    if(cycle>TIMEOUT_CYCLES)
+    if(cycle-frame_begin_cycle>TIMEOUT_CYCLES)
       $fatal(1,"Timeout in=%0d out=%0d model=%0d unique=%0d start=%b done=%b idle=%b",input_count,output_count,model_reads,unique_model_reads,dut.ap_start,dut.ap_done,dut.ap_idle);
     if(ap_rst_n) begin
       if($isunknown({awready,wready,bvalid,arready,rvalid,input_ready,output_valid,dut.ap_start,dut.ap_done,dut.ap_idle,dut.ap_ready}))
@@ -108,6 +124,7 @@ module srcnn_axis_independent_tb;
         $display("EVENT rtl_ap_done cycle=%0d time=%0t",cycle,$time);
       end
       if(input_valid && input_ready) begin
+        if(!started) $fatal(1,"Input outside active frame");
         if(input_count>=PIXELS) $fatal(1,"Extra input accepted");
         if(input_count==0) $display("EVENT first_input cycle=%0d time=%0t",cycle,$time);
         input_count=input_count+1;
@@ -118,14 +135,15 @@ module srcnn_axis_independent_tb;
       if(output_stalled) output_stall_cycles=output_stall_cycles+1;
       held_output={output_data,output_keep,output_strb,output_last};
       if(output_valid && output_ready) begin
+        if(!started) $fatal(1,"Output outside active frame");
         if(output_count>=PIXELS) $fatal(1,"Extra output");
-        if(output_data!==expected_words[output_count]) $fatal(1,"Output %0d expected=%h actual=%h",output_count,expected_words[output_count],output_data);
+        if(output_data!==expected_words[output_count]) $fatal(1,"Output %0d expected=%h actual=%h frame=%0d",output_count,expected_words[output_count],output_data,frame+1);
         if(output_keep!==4'hf || output_strb!==4'hf || output_last!==(output_count==PIXELS-1))
           $fatal(1,"Invalid output sideband index=%0d",output_count);
         if(output_count==0) $display("EVENT first_output cycle=%0d time=%0t",cycle,$time);
         output_count=output_count+1;
       end
-      if(cycle%500000==0) $display("PROGRESS cycle=%0d in=%0d out=%0d model=%0d",cycle,input_count,output_count,model_reads);
+      if(cycle%PROGRESS_CYCLES==0) $display("PROGRESS frame=%0d cycle=%0d in=%0d out=%0d model=%0d",frame+1,cycle,input_count,output_count,model_reads);
     end
   end
   task automatic axi_write(input [5:0] address,input [31:0] value);
@@ -164,16 +182,30 @@ module srcnn_axis_independent_tb;
   integer i;
   reg [31:0] status;
   initial begin
-    $readmemh("model.hex",model_words);$readmemh("input.hex",input_words);$readmemh("expected.hex",expected_words);
+    repeat(20) @(negedge ap_clk);ap_rst_n=1;$display("EVENT reset_released time=%0t",$time);
+    repeat(4) @(negedge ap_clk);
+    for(frame=0;frame<FRAMES;frame=frame+1) begin
+    // Reset only scoreboard state. The DUT receives no reset between frames.
+    if(mem_active || output_valid!==0 || input_valid!==0 || dut.ap_idle!==1)
+      $fatal(1,"DUT not idle at frame boundary frame=%0d",frame+1);
+    started=0;completed=0;frame_begin_cycle=cycle;
+    input_count=0;output_count=0;model_reads=0;unique_model_reads=0;ar_count=0;
+    start_cycle=-1;done_cycle=-1;rtl_done_cycle=-1;output_stall_cycles=0;output_stalled=0;
+    if(frame==0) begin
+      $readmemh("model.hex",model_words);$readmemh("input.hex",input_words);$readmemh("expected.hex",expected_words);
+    end else begin
+      $readmemh("model2.hex",model_words);$readmemh("input2.hex",input_words);$readmemh("expected2.hex",expected_words);
+    end
     for(i=0;i<MODEL_WORDS;i=i+1) begin
       model_seen[i]=0;if($isunknown(model_words[i])) $fatal(1,"Missing model word %0d",i);
     end
     for(i=0;i<PIXELS;i=i+1) if($isunknown(input_words[i]) || $isunknown(expected_words[i])) $fatal(1,"Missing input/golden word %0d",i);
-    repeat(20) @(negedge ap_clk);ap_rst_n=1;$display("EVENT reset_released time=%0t",$time);
-    repeat(4) @(negedge ap_clk);
+    $display("EVENT frame_begin frame=%0d cycle=%0d reset=%b",frame+1,cycle,ap_rst_n);
     axi_write(6'h10,MODEL_BASE[31:0]);axi_write(6'h14,MODEL_BASE[63:32]);
 `ifndef FIXED_13X17
+`ifndef DEPLOYMENT_255X255
     axi_write(6'h1c,13);axi_write(6'h24,17);
+`endif
 `endif
     started=1;axi_write(6'h00,1);
     fork
@@ -188,7 +220,12 @@ module srcnn_axis_independent_tb;
     if(!completed || start_cycle<0 || rtl_done_cycle<0 || input_count!=PIXELS || output_count!=PIXELS ||
        model_reads!=MODEL_WORDS || unique_model_reads!=MODEL_WORDS || mem_active || output_stall_cycles==0)
       $fatal(1,"Incomplete start=%0d in=%0d out=%0d model=%0d unique=%0d",start_cycle,input_count,output_count,model_reads,unique_model_reads);
-    $display("PASS independent RTL: transactions=1 inputs=%0d outputs=%0d model_reads=%0d unique=%0d AR_bursts=%0d cycles=%0d start_to_rtl_done=%0d polled_done_cycle=%0d output_stall_cycles=%0d time=%0t",input_count,output_count,model_reads,unique_model_reads,ar_count,cycle,rtl_done_cycle-start_cycle,done_cycle,output_stall_cycles,$time);
+    $display("PASS frame=%0d inputs=%0d outputs=%0d model_reads=%0d unique=%0d AR_bursts=%0d cycles=%0d start_to_rtl_done=%0d polled_done_cycle=%0d output_stall_cycles=%0d time=%0t",frame+1,input_count,output_count,model_reads,unique_model_reads,ar_count,cycle,rtl_done_cycle-start_cycle,done_cycle,output_stall_cycles,$time);
+    total_inputs=total_inputs+input_count;total_outputs=total_outputs+output_count;
+    total_model_reads=total_model_reads+model_reads;total_unique_reads=total_unique_reads+unique_model_reads;
+    total_bursts=total_bursts+ar_count;total_stalls=total_stalls+output_stall_cycles;
+    end
+    $display("PASS independent RTL: transactions=%0d inputs=%0d outputs=%0d model_reads=%0d unique=%0d AR_bursts=%0d cycles=%0d start_to_rtl_done=%0d polled_done_cycle=%0d output_stall_cycles=%0d time=%0t",FRAMES,total_inputs,total_outputs,total_model_reads,total_unique_reads,total_bursts,cycle,rtl_done_cycle-start_cycle,done_cycle,total_stalls,$time);
     $finish;
   end
 endmodule
