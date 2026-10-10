@@ -2,6 +2,9 @@
 
 Status: software prepared; supplied official assets evaluated offline;
 physical KV260 execution pending. See `results/p3-official-assets-evaluation.md`.
+The subsequent offline fractional sweep recommends Q20.12 as the first
+hardware experiment; see `results/p3-official-precision-study.md`. The current
+overlay, bundle format and board runner still use Q24.8.
 The supplied archive contains Butterfly from Set5 and thirteen Set14 cases.
 Hardware checkpoint: `571149b`, source `fef8043`, fixed 255x255, 200 MHz.
 No HLS/DUT/pragma/numeric changes are part of this work.
@@ -88,6 +91,29 @@ TKEEP/TSTRB/TLAST, and writes uint32 output codes. Compile with C++14/O2,
 `hls/src/srcnn_axis_dataflow.cpp`. Smaller frames call the diagnostic top.
 Usage: `srcnn_axis_raw_host input_float.bin model_float.bin output_raw.bin H W`.
 This is host ap_fixed validation, not new RTL or board simulation.
+
+## Offline precision exploration
+
+`precision_numeric.py` and `study_official_precision.py` compare 32-bit formats
+with 8/10/12/14/16/18/20 fractional bits. They do not change deployment_numeric,
+prepare_srcnn_deployment, HLS types or the current board runner. The study counts
+saturations, records every partial MAC range, and proves official-model
+intervals using integer arithmetic. The proposed 0.1 dB reconstruction delta
+and 50 dB reference-agreement criteria are engineering screens, not course
+requirements. Q20.12 is the lowest tested passing format on supplied images.
+
+```text
+python tools/study_official_precision.py --root PATH_TO_GOLDEN --out NEW_DIRECTORY --source-commit 6b9bba6dd4af86a8636960f53714937867cb4f79
+python tests/test_precision_study.py -v
+```
+
+The old <=1 weight/bias worst-case contract does not fit higher-precision
+32-bit formats. The report distinguishes its failing guard from a proposed
+upward-rounded official-model contract, under which Q20.12 fits without
+turning off the guard. Neither that contract nor its new accumulator widths
+has been applied to HLS. Do not send candidate raw codes to the frozen overlay
+or label them as Q24.8 bundles; numerical adoption requires source and host
+format versioning and renewed HLS/RTL/routed timing validation.
 
 ## Board runner and notebook
 
