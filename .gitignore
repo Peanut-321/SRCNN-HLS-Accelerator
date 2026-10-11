@@ -10,6 +10,9 @@
 /.codex-finalizer/
 /.chart-data-*/
 /.Xil/
+/aero-*-hpm1.log
+/aero-*-hpm1.jou
+__pycache__/
 *.swp
 *.swo
 *~

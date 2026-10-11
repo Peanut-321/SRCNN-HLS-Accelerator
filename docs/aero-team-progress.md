@@ -1,41 +1,56 @@
 # Aero deployment handoff — 2026-10-11
 
-Branch: `deploy/vivado-pynq`. This update does not merge or modify the team's
-SRCNN HLS core. Previously committed P0a/P0b sources and reports are not recopied.
+## Q24.8 and Q20.12: final V3 physical validation PASS
 
-## Completed and uploaded
+Both formats passed KV260 tests. Downloaded evidence was independently audited:
+all 14 frames per format contain 65,025 uint32 words, exactly matching each
+format's fixed-point Golden. This does not claim zero error versus float.
+Tests cover warmup, 10 repeats, changed input AND model, restored input/model,
+and overlay reload. BIT/HWH hashes match V3. ZIP CRC, schedule, statistics and
+executed notebooks passed audit.
 
-- Dummy KV260/PYNQ physical validation: 14-bit DMA 1,200/1,200 PASS;
-  upgraded 26-bit DMA 1,500/1,500 unique cases PASS, across three overlay
-  loads and lengths 1, 5, 257, 4,095 and 65,025 words.
-- Dummy host-observed benchmark: 65,025 words, median 885.97 us,
-  P95 941.39 us, input-payload throughput 293.58 MB/s. This is NOT SRCNN speed.
-- Evidence: `results/p0c-board/` includes both run logs, both benchmarks and
-  the latest executed notebook. `deliverables/aero-local/` contains the
-  matching 26-bit dummy bit/HWH pair; `vivado/p0b-btt26/` contains its Tcl.
-- Formal Q24.8 and Q20.12 deployment IPs rebuilt from separate frozen sources,
-  both synthesized, routed and exported at requested 200 MHz.
-  Q24.8 WNS/WHS: +0.077/+0.011 ns; Q20.12: +0.107/+0.010 ns.
-  Both have zero blocking DRC violations; nonblocking advisories remain.
-- `deliverables/aero-local/srcnn_q24_8.zip` and `srcnn_q20_12.zip` each
-  contain the IP ZIP, matching bit/HWH/XSA, source provenance, timing/DRC
-  reports, Butterfly and changed-case bundles, and an English board notebook.
-  Packages passed offline hash/ZIP/XSA consistency checks.
+| Format | Median seconds | P95 seconds | Reciprocal median FPS |
+|---|---:|---:|---:|
+| Q24.8 | 0.7498277790000429 | 0.7499921595999695 | 1.3336395743214293 |
+| Q20.12 | 0.7498662649999801 | 0.7499635060000571 | 1.3335711268462338 |
 
-## Remaining / avoid duplicate work
+Timing is host-observed transfer-start-to-done INCLUDING model loading and
+DMA, NOT kernel-only or independently measured sustained FPS. The board clock
+shows August 17; actual validation/receipt was October 11. Preserve raw names
+but do not treat their timestamp as the experiment's real calendar date.
 
-Formal SRCNN physical-board results are **PENDING for both formats**. Aero's
-next task is to test these packages on KV260: all output words, repeated
-frames, changed input/model, restored model and overlay reload; then measure
-and save real hardware results. The notebook defaults to RUN_BOARD=False.
+## Canonical files — no repeated extracted copies
 
-Do not rebuild these two local deployment packages merely because generated
-IP/bit/HWH files were previously missing from Git. HLS core optimization,
-dataset-wide quality evaluation and final reporting remain separate tasks;
-this update does not claim the whole project complete.
+- `deliverables/aero-local/srcnn_q24_8_v3_resetfix.zip`
+- `deliverables/aero-local/srcnn_q20_12_v3_resetfix.zip`
+- `results/srcnn-board/q24_8/q24_8_board_results.zip`
+- `results/srcnn-board/q24_8/SRCNN_board_test.ipynb`
+- `results/srcnn-board/q20_12/q20_12_board_results.zip`
+- `results/srcnn-board/q20_12/SRCNN_board_test.ipynb`
 
-Use each format's own bundle/runner. Finish one notebook kernel before
-programming the other. No license files, temporary Vivado projects or
-duplicate extracted copies of these delivery ZIPs are included.
+Each results ZIP contains one JSON and 14 NPY outputs. These are not duplicated
+as loose files. Deployment ZIPs contain IP, matched BIT/HWH, runtime, bundles,
+source identity and implementation reports. Old original/V2 deployment ZIPs
+are retired and removed from the current tree. Historical Git commits remain
+recoverable, but MUST NOT be used for deployment.
 
-Detailed build provenance: `results/aero-local-dual-build.md`.
+## Correction and existing work
+
+V2 tied the active-low auxiliary reset LOW, permanently asserting AXI reset.
+V3 ties it HIGH, verified in generated HDL/HWH and reset-netlist simulation.
+Control uses HPM1 at B0000000/B0010000; DDR uses HPC0. Both V3 builds pass
+timing/DRC/export. See `results/aero-reset-audit.md` and
+`results/aero-local-dual-build.md`. Team numerical sources are unchanged.
+
+Known-good dummy files and `results/p0c-board/` remain unchanged: 26-bit DMA,
+1,500 unique cases PASS. Its bandwidth is NOT SRCNN inference performance.
+
+## Remaining team tasks — do not rebuild or repeat passed board tests
+
+Aero's dual-format deployment and this board-validation scope are complete.
+The full project still requires consolidation of CPU baseline, same-boundary
+speedup, float/quality comparisons, resource/optimization tables, presentation,
+final report and submission requirements. Check teammate artifacts before
+duplicating work. No dataset-wide physical validation or whole-project
+completion is claimed. Use one format and one board-test kernel at a time.
+No licenses, temporary Vivado projects or failed deployment ZIPs are included.

@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import statistics
 import sys
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -20,10 +21,35 @@ CHECKPOINTS = {
 }
 # Retain failed runners in a notebook until PL has been safely reset.
 ACTIVE_RUNNERS = []
+PREFLIGHT_OVERLAY = None
 
 
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_reset_tieoffs(modules):
+    """Fail closed on a reset controller tied permanently active."""
+    reset = modules.get("reset")
+    if reset is None:
+        raise ValueError("Missing reset controller")
+    params = {p.get("NAME").lower(): p.get("VALUE")
+              for p in reset.findall("PARAMETERS/PARAMETER")}
+    for name in ("c_ext_reset_high", "c_aux_reset_high"):
+        if int(params.get(name, "-1"), 0) != 0:
+            raise ValueError(f"Unexpected reset polarity: {name}")
+    for port_name, required_value in (("aux_reset_in", 1), ("dcm_locked", 1),
+                                      ("mb_debug_sys_rst", 0)):
+        port = reset.find(f"PORTS/PORT[@NAME='{port_name}']")
+        connections = [] if port is None else port.findall("CONNECTIONS/CONNECTION")
+        if len(connections) != 1:
+            raise ValueError(f"Reset tie-off is missing or ambiguous: {port_name}")
+        driver = modules.get(connections[0].get("INSTANCE"))
+        value = None if driver is None else driver.find("PARAMETERS/PARAMETER[@NAME='CONST_VAL']")
+        if (driver is None or driver.get("MODTYPE") != "xlconstant" or
+                connections[0].get("PORT") != "dout" or value is None or
+                int(value.get("VALUE"), 0) != required_value):
+            raise ValueError(f"Unsafe reset tie-off: {port_name}; expected constant {required_value}")
 
 
 def verify_delivery(directory):
@@ -50,6 +76,10 @@ def verify_delivery(directory):
         required.add("srcnn_q20_12_bundle.py")
     if not required <= set(manifest["files"]):
         raise ValueError("Incomplete delivery manifest")
+    if (directory / "srcnn_axis_255x255.xsa").exists():
+        raise ValueError("Move runtime sibling XSA into build_reports before using PYNQ")
+    root = ET.parse(directory / "srcnn_axis_255x255.hwh").getroot()
+    validate_reset_tieoffs({m.get("INSTANCE"): m for m in root.findall("MODULES/MODULE")})
     sys.path.insert(0, str(directory))
     import srcnn_axis_host as host
     if Path(host.__file__).resolve() != directory / "srcnn_axis_host.py":
@@ -73,10 +103,47 @@ def verify_delivery(directory):
     return directory, manifest, host, cases
 
 
+def preflight_board(directory):
+    """Explicit programming and control-path check; no DMA or inference starts.
+
+    Python timeouts cannot recover a hard AXI bus stall. Do not repeat a stuck
+    preflight in another kernel; recover the board and inspect its configuration.
+    """
+    global PREFLIGHT_OVERLAY
+    directory, manifest, _, _ = verify_delivery(directory)
+    if manifest.get("deployment_revision") != "HPM1_HPC0_B000_B001_RESETFIX_V3":
+        raise ValueError("Preflight requires the corrected HPM1 delivery")
+    from pynq import Overlay, MMIO, Clocks
+    print("STAGE 1: Parse metadata; no programming yet", flush=True)
+    overlay = Overlay(str(directory / "srcnn_axis_255x255.bit"), download=False)
+    for name, expected in (("dma", 0xB0000000), ("srcnn", 0xB0010000)):
+        if overlay.ip_dict[name]["phys_addr"] != expected:
+            raise ValueError(f"Wrong control address for {name}")
+    print("STAGE 2: Download verified bitstream", flush=True)
+    overlay.download()
+    PREFLIGHT_OVERLAY = overlay
+    if not overlay.is_loaded() or abs(float(Clocks.fclk0_mhz) - 200) > 1:
+        raise ValueError("Overlay load or PL0 clock check failed")
+    values = {}
+    for name in ("dma", "srcnn"):
+        info = overlay.ip_dict[name]
+        print(f"STAGE 3: Map {name} at {info['phys_addr']:#x}", flush=True)
+        mmio = MMIO(info["phys_addr"], info["addr_range"], device=overlay.device)
+        print(f"STAGE 4: Read {name} status", flush=True)
+        values[name] = int(mmio.read(0x04 if name == "dma" else 0x00))
+        print(f"{name} status: {values[name]:#x}", flush=True)
+    if not values["srcnn"] & 4 or not values["dma"] & 1:
+        raise RuntimeError("Fresh overlay is not idle with DMA halted; do not start inference")
+    print("PASS: Control path only; inference has NOT been validated", flush=True)
+    return values
+
+
 def run_board(directory, out, iterations=3, timeout=120):
     if iterations < 1 or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("Iterations and timeout must be positive")
     directory, manifest, host, cases = verify_delivery(directory)
+    if manifest.get("deployment_revision") != "HPM1_HPC0_B000_B001_RESETFIX_V3":
+        raise ValueError("Old deployment is not approved for physical execution")
     out = Path(out)
     out.mkdir(parents=True, exist_ok=False)
     report = {"status": "RUNNING", "profile": manifest["profile"],

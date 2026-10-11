@@ -31,6 +31,22 @@ class FakeRunner:
 
 
 class BoardTests(unittest.TestCase):
+    def test_preflight_stages_without_hardware(self):
+        overlay = SimpleNamespace(
+            ip_dict={name: {"phys_addr": addr, "addr_range": 65536}
+                     for name, addr in (("dma", 0xB0000000), ("srcnn", 0xB0010000))},
+            device=object(), download=lambda: None, is_loaded=lambda: True)
+        fake_pynq = SimpleNamespace(Overlay=lambda *a, **kw: overlay,
+                                   Clocks=SimpleNamespace(fclk0_mhz=200),
+                                   MMIO=lambda addr, *a, **kw: SimpleNamespace(
+                                       read=lambda offset: 1 if addr == 0xB0000000 else 4))
+        verified = (Path('.'), {'deployment_revision': 'HPM1_HPC0_B000_B001_RESETFIX_V3'}, None, None)
+        with patch.object(board, 'verify_delivery', return_value=verified), patch.dict(sys.modules, {'pynq': fake_pynq}):
+            self.assertEqual(board.preflight_board('.'), {'dma': 1, 'srcnn': 4})
+            overlay.ip_dict['srcnn']['phys_addr'] = 0xA0010000
+            with self.assertRaisesRegex(ValueError, 'Wrong control address'):
+                board.preflight_board('.')
+
     def setUp(self):
         FakeRunner.instances = []
         FakeRunner.fail = False
@@ -39,7 +55,7 @@ class BoardTests(unittest.TestCase):
     def verified(self):
         cases = {name: ({}, {"input": np.array([value]), "expected": np.array([value])})
                  for name, value in (("butterfly", 1), ("changed", 2))}
-        return Path("."), {"profile": "q20_12", "source_commit": board.CHECKPOINTS["q20_12"]}, SimpleNamespace(Runner=FakeRunner), cases
+        return Path("."), {"profile": "q20_12", "source_commit": board.CHECKPOINTS["q20_12"], "deployment_revision": "HPM1_HPC0_B000_B001_RESETFIX_V3"}, SimpleNamespace(Runner=FakeRunner), cases
 
     def test_schedule_and_reload(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(board, "verify_delivery", return_value=self.verified()):
