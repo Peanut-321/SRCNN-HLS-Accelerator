@@ -1,7 +1,11 @@
 # P0c KV260/PYNQ dummy-overlay procedure
 
-Status: board-pending. This procedure must only be marked PASS after running
-on a physical KV260.
+Status: physical KV260 dummy validation PASS (2026-10-09).
+Saved evidence: `results/p0c-board/`. The original 14-bit run passed 1,200
+cases; the rebuilt 26-bit run passed 1,500 unique cases, including 65,025 words.
+The 26-bit overlay pair is in `deliverables/aero-local/`; reproduction Tcl is
+`vivado/p0b-btt26/design_1_btt26_recreate.tcl` (requires the dummy IP repository).
+These are dummy-chain results, NOT formal SRCNN inference results.
 
 ## Files to copy to the board
 

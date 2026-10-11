@@ -1,0 +1,3 @@
+# Preserve generated handoff and delivery bytes across Windows/Linux clones.
+deliverables/aero-local/* -text
+results/p0c-board/* -text

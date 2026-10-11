@@ -9,6 +9,7 @@
 /.codex-build/
 /.codex-finalizer/
 /.chart-data-*/
+/.Xil/
 *.swp
 *.swo
 *~
