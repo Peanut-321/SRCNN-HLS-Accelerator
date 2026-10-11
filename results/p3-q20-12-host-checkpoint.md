@@ -3,7 +3,11 @@
 Date: 2026-10-10. Branch: `optimize/official-q20-12`.
 Base: `5f0216704cdd7ba70e2c8a493469c2df97e32259`.
 Official asset source: `6b9bba6dd4af86a8636960f53714937867cb4f79`.
-Status: **HOST VERIFIED; Q20.12 HLS/RTL/IMPLEMENTATION/BOARD GATES PENDING**.
+Status at this historical checkpoint: **HOST VERIFIED; later gates pending**.
+Subsequent checkpoints complete [HLS/Conv1 II=1](p3-q20-12-conv1-writeback.md),
+[full-frame/restart RTL](p3-q20-12-full-frame-rtl.md), and
+[routed KV260 implementation/export](p3-q20-12-vivado.md).
+Q20.12 board runner and board validation remain pending.
 
 ## Change
 

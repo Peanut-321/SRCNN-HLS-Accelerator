@@ -2,7 +2,9 @@
 
 This is an opt-in numerical experiment. The default Q24.8 build, V1 bundles,
 PYNQ runner, existing RTL checkpoints and routed overlay retain their original
-contract. This branch does not provide a Q20.12 bitstream or board runner.
+contract. A separate Q20.12 routed bitstream candidate is now available;
+see [the current Vivado checkpoint](../results/p3-q20-12-vivado.md).
+This branch does not yet provide a Q20.12 board runner or board validation.
 
 ## Numerical contract
 
@@ -163,15 +165,48 @@ negative run must finish frame one before rejecting frame two's output 0.
 The runner saves port WDBs and source/RTL/vector manifests. These tests use
 the independent SV harness, not Vitis autotb/UVM.
 
+## Q20.12 routed KV260 candidate
+
+[The Vivado checkpoint](../results/p3-q20-12-vivado.md) passes the independent
+KV260 PS/simple-DMA integration and routed 5 ns setup/hold/pulse-width gates.
+WNS is +0.107 ns, WHS +0.010 ns; all 12 timing-coverage categories are zero.
+The fixed deployment IP is reused from the full-frame RTL gate above.
+No HLS source or scheduling change is made for implementation.
+
+Use the verified fixed deployment component and new project/results paths:
+
+```powershell
+& .\hls\scripts\run_axis_q20_12_vivado.ps1 -Component "$q20Root\deployment_255x255_5ns" -ProjectDir C:\fpga\q20-vivado-reproduction -ResultDir C:\fpga\q20-vivado-reproduction-results
+```
+
+The wrapper checks official Q20.12 flags, source hashes, exported RTL and
+5 ns timing/coverage. It rejects small diagnostic tops and refuses to resume
+an unrelated project/IP snapshot. Resume with `-Stage implement` using the
+original component, project and results directory. For an interrupted run,
+`-RestartInterruptedImplementation` archives the old implementation and
+resets only that run, with no Vivado process running.
+
+Candidate artifacts are named `srcnn_axis_q20_12_255x255.bit/.hwh/.xsa` with
+`q20-overlay-manifest.json` recording profile and hashes. These are distinct
+from Q24.8 artifacts; the existing Q24.8 host runner still rejects them.
+Do not copy the small-frame diagnostic IP or use a Q24.8/V1 model bundle
+with the Q20.12 candidate. Generated projects, reports and binaries remain
+outside Git. See the result report for the actual output directory and hashes.
+
 ## Next gate
 
 The host checkpoint is in
 [p3-q20-12-host-checkpoint.md](../results/p3-q20-12-host-checkpoint.md).
 The direct-writeback checkpoint establishes II=1, resource estimates and
 small-frame RTL correctness without changing the numeric contract. Full-frame
-and no-reset restart coverage now pass as recorded above. Next verify the
-candidate's integration and routed timing, then its matching Q20.12 runner.
+and no-reset restart coverage now pass as recorded above. Integration and
+routed timing also pass. Aero's `deploy/vivado-pynq` checkpoint `8b87af8`
+now supplies a matching Q20.12 board package and orchestration wrapper.
+Use [the cross-branch handoff](p3-q20-12-handoff.md) to select that entire
+package, then perform the separate board boot/clock, DMA and full-frame
+correctness gate. Do not duplicate runner or HLS/Vivado work.
 Any deployment export must use `srcnn_axis_dataflow_top`. Existing Q24.8
-components/RTL/overlays remain separate. Routed implementation and board
-validation have not been completed for Q20.12; estimated top slack remains
-zero. Use short work paths to avoid Windows RTL-generator path limits.
+components/RTL/overlays remain separate. Board validation is still pending
+for Q20.12. HLS estimated top slack remains zero,
+whereas the distinct Vivado routed check above passes. Use short work paths
+to avoid Windows RTL-generator path limits.
