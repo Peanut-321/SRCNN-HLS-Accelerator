@@ -20,6 +20,11 @@ No newer DUT optimization is hidden in an uncommitted working tree. The latest
 Windows follow-up changes only integration verification scripts/documentation.
 Existing local `logs/` and Vivado journal files are generated files, not new code.
 
+The subsequent [formal runner offline audit](../results/p3-formal-board-runner-offline-audit.md)
+executes both actual uploaded deliveries: package inspection PASS, 9 existing
+tests PASS and 13 fake-PYNQ host-control/failure tests per profile PASS. It found
+no required delivery-code repair. Both formal physical board gates remain pending.
+
 ## Completed work
 
 - Q20.12 host/profile/V2 bundle and 19-test regression; all 14 supplied-image
