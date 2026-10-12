@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "date": "2026-10-12",
+  "formats": {
+    "q20_12": {
+      "deployment_archive_sha256": "8ee8587d818d26b6a88efe5029c00ae6d75bcb5431ef309608dd338e0dde369a",
+      "verified_manifest_files": 31,
+      "original_board_frames": 14,
+      "exact_output_words": 910350,
+      "median_transfer_seconds": 0.7498662649999801,
+      "english_notebook_sha256": "bb127ab037090750aa1aa318da38b3331e2c0637bf938dac5311c8f8449cd553",
+      "source_commit": "18281e76b9070b6801620a8548c7ae8b72f47db5"
+    },
+    "q24_8": {
+      "deployment_archive_sha256": "fef9573c73637a0fed8dce3de5279e218e93392be0e2265c3883c900cfdab099",
+      "verified_manifest_files": 30,
+      "original_board_frames": 14,
+      "exact_output_words": 910350,
+      "median_transfer_seconds": 0.7498277790000429,
+      "english_notebook_sha256": "bb127ab037090750aa1aa318da38b3331e2c0637bf938dac5311c8f8449cd553",
+      "source_commit": "5f0216704cdd7ba70e2c8a493469c2df97e32259"
+    }
+  },
+  "english_supplementary_kit": {
+    "sha256": "f0b57927d6e770e8652988413715d5c5da49c3e12de9b02082b7f6a5b859d020",
+    "files_checked": 134,
+    "status": "Offline validated reproduction package; not physically re-executed"
+  }
+}

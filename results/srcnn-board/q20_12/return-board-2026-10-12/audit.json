@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "audit_date": "2026-10-12",
+  "board_clock_warning": "Original filenames use an incorrect board clock; not the actual test date.",
+  "board_cases": [
+    "baboon",
+    "barbara",
+    "bridge",
+    "butterfly",
+    "coastguard",
+    "face",
+    "flowers",
+    "foreman",
+    "lenna",
+    "man",
+    "monarch",
+    "pepper",
+    "ppt3",
+    "zebra"
+  ],
+  "board_exact_words": 910350,
+  "cpu_exact_runs": 4,
+  "cpu_median_compute_seconds": 10.994656504,
+  "board_median_across_14_distinct_images_seconds": 0.749692452999966,
+  "timing_limitation": "CPU scalar C++ compute-only versus FPGA model-load and DMA window; not an optimized CPU comparison or matched timing boundary.",
+  "minimum_fixed_vs_float_agreement_psnr_db": 60.62116260639709,
+  "maximum_absolute_reconstruction_psnr_delta_db": 0.004187328506333188,
+  "sha256": {
+    "additional_board_results_20260817T063556_159491Z.zip": "d4ce62d60e293fc183e67820abece065eceb79f4e4ecfba691e8c22b737db4ac",
+    "cpu_results_20260817T063705_562593Z.zip": "64cd7c5d71bbe92812c94967e9c457c9606e796dcef376e961479677a33e2264",
+    "Untitled3.ipynb": "0b0a0f9176f28a47b731b48dfa993b1aba3e1f59fcd7fadccb228fa9810555b3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "audit_date": "2026-10-12",
+  "verified_output_words": 260100,
+  "cpu_median_seconds": 10.994656504,
+  "fpga_memory_to_memory_median_seconds": 0.7559463910001796,
+  "ratio_relative_to_scalar_single_thread_cpu_baseline": 14.54422778505915,
+  "scope": "Input and model already resident in host memory -> complete output resident in host memory. File IO, correctness comparison, compilation and initial overlay loading excluded.",
+  "limitations": "Functional memory-to-memory boundaries, not identical internal operations. CPU is a scalar reference baseline, not an optimized NEON/multithreaded library. CPU/FPGA were measured sequentially, not concurrently; CPU clock and thermal state were not controlled. No isolated kernel/model/DMA timing is claimed.",
+  "notebook": "Original error and successful retry records preserved unchanged.",
+  "archive_sha256": "3e02b248c77c5ad573018eddfc2a7343fe8bba7bdf94b595a17c5a96b778eff0",
+  "notebook_sha256": "13f6cabfb6a722c250c384f704c2f6009188a5ea5fddcbdec91e4d697c74a7b1"
+}

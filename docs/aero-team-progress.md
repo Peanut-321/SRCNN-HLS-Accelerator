@@ -1,5 +1,17 @@
 # Aero deployment handoff — 2026-10-11
 
+## Supplementary validation and English delivery — 2026-10-12
+
+See `docs/board-delivery-final-en.md` for the current execution entry points,
+full evidence inventory and final-report boundaries. Both original V3 result
+archives were re-audited. Q20.12 additionally passed 14 distinct supplied images
+(910,350 exact words). The audited Butterfly scalar C++ CPU median is
+10.994656504 s; FPGA memory-to-memory median is 0.755946391 s, giving a 14.5442
+time ratio relative to that single-thread scalar baseline only. English clean
+reproduction notebooks were validated offline; original physical records are
+unchanged. Separate model/compute/DMA timings and optimized CPU baselines are
+not claimed. The remaining-task text below records the earlier handoff state.
+
 ## Q24.8 and Q20.12: final V3 physical validation PASS
 
 Both formats passed KV260 tests. Downloaded evidence was independently audited:
